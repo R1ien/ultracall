@@ -69,6 +69,7 @@ button:hover{background:#3a6fdc;}
   <h2 id="callStatus">Appel en cours...</h2>
   <div id="callTimer">00:00</div>
   <div class="controls">
+    <button id="answerBtn" style="background:#4e8cff;display:none;"><i class="fa fa-phone"></i> Répondre</button>
     <button id="hangupBtn" style="background:#ff4d4d;"><i class="fa fa-phone-slash"></i> Raccrocher</button>
     <button id="muteBtn" style="background:#ffa500;"><i class="fa fa-microphone"></i> Couper micro</button>
   </div>
@@ -99,7 +100,10 @@ const callStatus=document.getElementById('callStatus');
 const callTimer=document.getElementById('callTimer');
 const hangupBtn=document.getElementById('hangupBtn');
 const muteBtn=document.getElementById('muteBtn');
+const answerBtn=document.getElementById('answerBtn');
 const remoteAudio=document.getElementById('remoteAudio');
+
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 // =================== Historique ===================
 function addHistory(code){
@@ -126,11 +130,12 @@ ws.onmessage=async ev=>{
   const msg=JSON.parse(ev.data);
   if(msg.type==='registered'){ myCode=msg.code; localStorage.setItem('myCode', myCode);}
   else if(msg.type==='incoming-call'){ 
-    const caller=msg.from;
-    startInterface(caller,'incoming');
+    callWith=msg.from;
+    startInterface(msg.from,'incoming');
   }
-  else if(msg.type==='call-accepted'){ callWith=msg.with; startCall(true); addHistory(callWith);}
-  else if(msg.type==='call-rejected'){ alert('Ton appel a été refusé'); }
+  else if(msg.type==='call-accepted'){ callWith=msg.with; startCall(true); addHistory(callWith); callStatus.textContent='Appel en cours...'; startTimer(true);}
+  else if(msg.type==='call-rejected'){ endCall(); alert('Ton appel a été refusé'); }
+  else if(msg.type==='hangup'){ endCall(); alert('L\'autre personne a raccroché'); }
   else if(msg.type==='signal'){ handleSignal(msg.payload); }
 };
 
@@ -142,8 +147,9 @@ function callFriend(code){ ws.send(JSON.stringify({cmd:'call', target:code})); a
 // =================== Interface centrale ===================
 function startInterface(code,type){
   callInterface.style.display='block';
-  if(type==='calling'){ callStatus.textContent='Appel en cours...'; startTimer(false); }
-  else if(type==='incoming'){ callStatus.textContent=`${code} t'appelle...`; callTimer.textContent='00:00'; }
+  answerBtn.style.display='none';
+  if(type==='calling'){ callStatus.textContent='Appel en cours...'; startTimer(false);}
+  else if(type==='incoming'){ callStatus.textContent=`${code} t'appelle...`; answerBtn.style.display='inline-block'; callTimer.textContent='00:00';}
 }
 
 // Timer
@@ -160,23 +166,26 @@ function startTimer(startNow){
 }
 
 // =================== Answer / Reject ===================
-function answerCall(from){ ws.send(JSON.stringify({cmd:'answer', from})); callWith=from; startCall(false); addHistory(from); callStatus.textContent='Appel en cours...'; startTimer(true);}
-function rejectCall(from){ ws.send(JSON.stringify({cmd:'reject', from})); callInterface.style.display='none';}
+answerBtn.onclick=()=>{ ws.send(JSON.stringify({cmd:'answer', from:callWith})); startCall(false); addHistory(callWith); callStatus.textContent='Appel en cours...'; startTimer(true); answerBtn.style.display='none'; }
+hangupBtn.onclick=()=>{ ws.send(JSON.stringify({cmd:'hangup', from:callWith})); endCall(); }
+function endCall(){
+  if(pc){ pc.close(); pc=null;}
+  callWith=null; callInterface.style.display='none'; clearInterval(timerInterval); callTimer.textContent='00:00';
+}
 
 // =================== WebRTC ===================
 async function startCall(isCaller){
   if(!localStream){ localStream=await navigator.mediaDevices.getUserMedia({audio:true}); }
-  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  pc=new RTCPeerConnection({iceServers:ICE_SERVERS});
   pc.ontrack=e=>{ remoteStream=e.streams[0]; remoteAudio.srcObject=remoteStream; }
   pc.onicecandidate=e=>{ if(e.candidate) ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{candidate:e.candidate}})); }
   localStream.getTracks().forEach(track=>pc.addTrack(track, localStream));
   if(isCaller){ const offer=await pc.createOffer(); await pc.setLocalDescription(offer); ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}})); }
 }
-async function handleSignal(payload){ if(!pc) await startCall(false); if(payload.sdp){ await pc.setRemoteDescription(payload.sdp); if(payload.sdp.type==='offer'){ const answer=await pc.createAnswer(); await pc.setLocalDescription(answer); ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}})); startTimer(true);} } else if(payload.candidate){ try{ await pc.addIceCandidate(payload.candidate);} catch{} }}
+async function handleSignal(payload){ if(!pc) await startCall(false); if(payload.sdp){ await pc.setRemoteDescription(payload.sdp); if(payload.sdp.type==='offer'){ const answer=await pc.createAnswer(); await pc.setLocalDescription(answer); ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}})); startTimer(true);} } else if(payload.candidate){ try{ await pc.addIceCandidate(payload.candidate);} catch{} } }
 
 // =================== Call Controls ===================
-hangupBtn.onclick=()=>{ if(pc){ pc.close(); pc=null;} callWith=null; callInterface.style.display='none'; clearInterval(timerInterval); callTimer.textContent='00:00'; }
-muteBtn.onclick=()=>{ if(!localStream) return; isMuted=!isMuted; localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted); muteBtn.innerHTML=isMuted?'<i class="fa fa-microphone-slash"></i> Micro coupé':'<i class="fa fa-microphone"></i> Couper micro';}
+muteBtn.onclick=()=>{ if(!localStream) return; isMuted=!isMuted; localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted); muteBtn.innerHTML=isMuted?'<i class="fa fa-microphone-slash"></i> Micro coupé':'<i class="fa fa-microphone"></i> Couper micro'; }
 
 // =================== Sliders ===================
 remoteGainSlider.oninput=()=>{ remoteVal.textContent=remoteGainSlider.value+'%'; if(remoteAudio) remoteAudio.volume=remoteGainSlider.value/100; }
