@@ -128,15 +128,15 @@ function renderHistory(){
 // =================== WebSocket ===================
 ws.onmessage=async ev=>{
   const msg=JSON.parse(ev.data);
-  if(msg.type==='registered'){ myCode=msg.code; localStorage.setItem('myCode', myCode);}
-  else if(msg.type==='incoming-call'){ 
-    callWith=msg.from;
-    startInterface(msg.from,'incoming');
+  switch(msg.type){
+    case 'registered': myCode=msg.code; localStorage.setItem('myCode', myCode); break;
+    case 'incoming-call': callWith=msg.from; startInterface(msg.from,'incoming'); break;
+    case 'call-accepted': callWith=msg.with; startCall(true); addHistory(callWith); callStatus.textContent='Appel en cours...'; startTimer(true); break;
+    case 'call-rejected': endCall(); alert('Ton appel a été refusé'); break;
+    case 'hangup': endCall(); alert('L\'autre personne a raccroché'); break;
+    case 'mute': alert(msg.muted?'L\'autre personne a coupé son micro':'L\'autre personne a réactivé son micro'); break;
+    case 'signal': handleSignal(msg.payload); break;
   }
-  else if(msg.type==='call-accepted'){ callWith=msg.with; startCall(true); addHistory(callWith); callStatus.textContent='Appel en cours...'; startTimer(true);}
-  else if(msg.type==='call-rejected'){ endCall(); alert('Ton appel a été refusé'); }
-  else if(msg.type==='hangup'){ endCall(); alert('L\'autre personne a raccroché'); }
-  else if(msg.type==='signal'){ handleSignal(msg.payload); }
 };
 
 // =================== Buttons ===================
@@ -165,7 +165,7 @@ function startTimer(startNow){
   },1000);
 }
 
-// =================== Answer / Hangup ===================
+// =================== Answer / Hangup / Mute ===================
 answerBtn.onclick=async ()=>{
   ws.send(JSON.stringify({cmd:'answer', from:callWith}));
   startCall(false);
@@ -176,8 +176,16 @@ answerBtn.onclick=async ()=>{
 }
 
 hangupBtn.onclick=()=>{
-  ws.send(JSON.stringify({cmd:'hangup', from:callWith}));
+  if(callWith) ws.send(JSON.stringify({cmd:'hangup', from:callWith}));
   endCall();
+}
+
+muteBtn.onclick=()=>{
+  if(!localStream) return;
+  isMuted = !isMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  muteBtn.innerHTML = isMuted ? '<i class="fa fa-microphone-slash"></i> Micro coupé' : '<i class="fa fa-microphone"></i> Couper micro';
+  if(callWith) ws.send(JSON.stringify({cmd:'mute', muted:isMuted, from:callWith}));
 }
 
 function endCall(){
@@ -233,21 +241,9 @@ async function handleSignal(payload){
   }
 }
 
-// =================== Call Controls ===================
-muteBtn.onclick=()=>{
-  if(!localStream) return;
-  isMuted = !isMuted;
-  localStream.getAudioTracks().forEach(t=>t.enabled = !isMuted);
-  muteBtn.innerHTML = isMuted?'<i class="fa fa-microphone-slash"></i> Micro coupé':'<i class="fa fa-microphone"></i> Couper micro';
-}
-
 // =================== Sliders ===================
-remoteGainSlider.oninput=()=>{ remoteVal.textContent=remoteGainSlider.value+'%'; if(remoteAudio) remoteAudio.volume=remoteGainSlider.value/100; }
-
-localGainSlider.oninput=()=>{ 
-  localVal.textContent=localGainSlider.value+'%'; 
-  if(localGainNode) localGainNode.gain.value = localGainSlider.value/100;
-}
+remoteGainSlider.oninput = () => { remoteVal.textContent=remoteGainSlider.value+'%'; if(remoteAudio) remoteAudio.volume=remoteGainSlider.value/100; }
+localGainSlider.oninput = () => { localVal.textContent=localGainSlider.value+'%'; if(localGainNode) localGainNode.gain.value = localGainSlider.value/100; }
 
 // =================== Init ===================
 window.addEventListener('load',()=>{
