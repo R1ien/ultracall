@@ -80,7 +80,7 @@ button:hover{background:#3a6fdc;}
 <script>
 const ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
 
-let pc=null, localStream=null, remoteStream=null;
+let pc=null, localStream=null, remoteStream=null, localAudioCtx=null, localGainNode=null;
 let callWith=null, myCode='', isMuted=false;
 let callStart=null, timerInterval=null;
 
@@ -165,9 +165,21 @@ function startTimer(startNow){
   },1000);
 }
 
-// =================== Answer / Reject ===================
-answerBtn.onclick=()=>{ ws.send(JSON.stringify({cmd:'answer', from:callWith})); startCall(false); addHistory(callWith); callStatus.textContent='Appel en cours...'; startTimer(true); answerBtn.style.display='none'; }
-hangupBtn.onclick=()=>{ ws.send(JSON.stringify({cmd:'hangup', from:callWith})); endCall(); }
+// =================== Answer / Hangup ===================
+answerBtn.onclick=async ()=>{
+  ws.send(JSON.stringify({cmd:'answer', from:callWith}));
+  startCall(false);
+  addHistory(callWith);
+  callStatus.textContent='Appel en cours...';
+  startTimer(true);
+  answerBtn.style.display='none';
+}
+
+hangupBtn.onclick=()=>{
+  ws.send(JSON.stringify({cmd:'hangup', from:callWith}));
+  endCall();
+}
+
 function endCall(){
   if(pc){ pc.close(); pc=null;}
   callWith=null; callInterface.style.display='none'; clearInterval(timerInterval); callTimer.textContent='00:00';
@@ -175,25 +187,76 @@ function endCall(){
 
 // =================== WebRTC ===================
 async function startCall(isCaller){
-  if(!localStream){ localStream=await navigator.mediaDevices.getUserMedia({audio:true}); }
-  pc=new RTCPeerConnection({iceServers:ICE_SERVERS});
-  pc.ontrack=e=>{ remoteStream=e.streams[0]; remoteAudio.srcObject=remoteStream; }
-  pc.onicecandidate=e=>{ if(e.candidate) ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{candidate:e.candidate}})); }
-  localStream.getTracks().forEach(track=>pc.addTrack(track, localStream));
-  if(isCaller){ const offer=await pc.createOffer(); await pc.setLocalDescription(offer); ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}})); }
+  if(!localStream){
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    localAudioCtx = new AudioContext();
+    const source = localAudioCtx.createMediaStreamSource(stream);
+    localGainNode = localAudioCtx.createGain();
+    localGainNode.gain.value = localGainSlider.value/100;
+    source.connect(localGainNode);
+    const dest = localAudioCtx.createMediaStreamDestination();
+    localGainNode.connect(dest);
+    localStream = dest.stream;
+  }
+
+  pc = new RTCPeerConnection({iceServers:ICE_SERVERS});
+  pc.ontrack = e => {
+    remoteStream = e.streams[0];
+    remoteAudio.srcObject = remoteStream;
+    remoteAudio.volume = remoteGainSlider.value/100;
+  }
+  pc.onicecandidate = e => {
+    if(e.candidate) ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{candidate:e.candidate}}));
+  }
+
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+  if(isCaller){
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}}));
+  }
 }
-async function handleSignal(payload){ if(!pc) await startCall(false); if(payload.sdp){ await pc.setRemoteDescription(payload.sdp); if(payload.sdp.type==='offer'){ const answer=await pc.createAnswer(); await pc.setLocalDescription(answer); ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}})); startTimer(true);} } else if(payload.candidate){ try{ await pc.addIceCandidate(payload.candidate);} catch{} } }
+
+async function handleSignal(payload){
+  if(!pc) await startCall(false);
+  if(payload.sdp){
+    await pc.setRemoteDescription(payload.sdp);
+    if(payload.sdp.type==='offer'){
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}}));
+      startTimer(true);
+    }
+  } else if(payload.candidate){
+    try{ await pc.addIceCandidate(payload.candidate);} catch{}
+  }
+}
 
 // =================== Call Controls ===================
-muteBtn.onclick=()=>{ if(!localStream) return; isMuted=!isMuted; localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted); muteBtn.innerHTML=isMuted?'<i class="fa fa-microphone-slash"></i> Micro coupé':'<i class="fa fa-microphone"></i> Couper micro'; }
+muteBtn.onclick=()=>{
+  if(!localStream) return;
+  isMuted = !isMuted;
+  localStream.getAudioTracks().forEach(t=>t.enabled = !isMuted);
+  muteBtn.innerHTML = isMuted?'<i class="fa fa-microphone-slash"></i> Micro coupé':'<i class="fa fa-microphone"></i> Couper micro';
+}
 
 // =================== Sliders ===================
 remoteGainSlider.oninput=()=>{ remoteVal.textContent=remoteGainSlider.value+'%'; if(remoteAudio) remoteAudio.volume=remoteGainSlider.value/100; }
-localGainSlider.oninput=()=>{ localVal.textContent=localGainSlider.value+'%'; }
+
+localGainSlider.oninput=()=>{ 
+  localVal.textContent=localGainSlider.value+'%'; 
+  if(localGainNode) localGainNode.gain.value = localGainSlider.value/100;
+}
 
 // =================== Init ===================
 window.addEventListener('load',()=>{
-  const saved=localStorage.getItem('myCode'); if(saved){ myCodeInput.value=saved; myCode=saved; ws.addEventListener('open',()=>ws.send(JSON.stringify({cmd:'register', code:saved}))); }
+  const saved=localStorage.getItem('myCode'); 
+  if(saved){ 
+    myCodeInput.value=saved; 
+    myCode=saved; 
+    ws.addEventListener('open',()=>ws.send(JSON.stringify({cmd:'register', code:saved}))); 
+  }
   renderHistory();
 });
 </script>
