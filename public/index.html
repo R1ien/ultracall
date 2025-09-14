@@ -6,52 +6,28 @@
 <title>Ultra Call</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 <style>
-/* ======== Reset & Base ======== */
-body,html{margin:0;padding:0;font-family:'Segoe UI',sans-serif;}
-body{background:linear-gradient(135deg,#111,#1a1a1a);color:#fff;}
-
-/* ======== Header ======== */
-header{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:15px 20px;background:#0d0d0d;border-bottom:1px solid #333;
-}
+body,html{margin:0;padding:0;font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#111,#1a1a1a);color:#fff;height:100%;}
+header{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;background:#0d0d0d;border-bottom:1px solid #333;}
 header .logo{font-size:1.8em;font-weight:bold;color:#4e8cff;}
 header .nav{display:flex;gap:20px;}
 header .nav span{cursor:pointer;padding:5px 10px;border-radius:6px;}
 header .nav .active{background:#4e8cff;color:#fff;}
 header .nav .coming{color:#888;}
-
-/* ======== Container ======== */
-.container{max-width:800px;margin:30px auto;padding:0 20px;}
-h3{margin-top:20px;font-weight:500;color:#ccc;}
+.container{max-width:800px;margin:20px auto;padding:0 20px;}
 input,button{border:none;outline:none;font-size:1em;}
 input{padding:10px 12px;border-radius:8px;margin:5px 0;width:calc(100% - 24px);background:#222;color:#fff;}
 button{padding:10px 15px;border-radius:8px;margin:5px 5px 5px 0;background:#4e8cff;color:#fff;cursor:pointer;transition:0.2s;}
 button:hover{background:#3a6fdc;}
-
-/* ======== Call Controls ======== */
-#callControls{margin-top:15px;display:none;gap:10px;}
-#callControls button{display:flex;align-items:center;gap:8px;}
-#callControls button .fa{font-size:1.2em;}
-
-/* ======== Sliders ======== */
 .slider-container{margin:12px 0;}
 .slider-container input[type=range]{width:100%;}
-
-/* ======== History ======== */
+#callInterface{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a1a;padding:30px;border-radius:15px;text-align:center;display:none;min-width:280px;}
+#callInterface h2{margin-bottom:20px;font-size:1.5em;}
+#callInterface .controls{display:flex;justify-content:center;gap:20px;margin-top:20px;}
+#callInterface button{display:flex;align-items:center;gap:8px;}
+#callInterface button .fa{font-size:1.2em;}
 #history{margin-top:15px;display:flex;flex-direction:column;gap:8px;}
 #history button{background:#333;color:#fff;width:100%;text-align:left;transition:0.2s;}
 #history button:hover{background:#4e8cff;color:#fff;}
-
-/* ======== Notifications ======== */
-#notifications{position:fixed;top:15px;right:15px;width:300px;z-index:999;display:flex;flex-direction:column;gap:10px;}
-.notification{
-  background:#1a1a1a;padding:12px 15px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.6);
-  border-left:5px solid #4e8cff;color:#fff;font-size:0.95em;
-}
-
-/* ======== Audio Element ======== */
-audio{display:none;}
 </style>
 </head>
 <body>
@@ -85,24 +61,27 @@ audio{display:none;}
     <input type="range" id="localGain" min="0" max="200" value="100"/>
   </div>
 
-  <div id="callControls">
-    <button id="hangupBtn" style="background:#ff4d4d;"><i class="fa fa-phone-slash"></i> Raccrocher</button>
-    <button id="muteBtn" style="background:#ffa500;"><i class="fa fa-microphone"></i> Couper micro</button>
-  </div>
-
   <h3>Historique des appels :</h3>
   <ul id="history"></ul>
 </div>
 
-<div id="notifications"></div>
+<div id="callInterface">
+  <h2 id="callStatus">Appel en cours...</h2>
+  <div id="callTimer">00:00</div>
+  <div class="controls">
+    <button id="hangupBtn" style="background:#ff4d4d;"><i class="fa fa-phone-slash"></i> Raccrocher</button>
+    <button id="muteBtn" style="background:#ffa500;"><i class="fa fa-microphone"></i> Couper micro</button>
+  </div>
+</div>
+
 <audio id="remoteAudio" autoplay></audio>
 
 <script>
-// =================== Variables ===================
 const ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
 
 let pc=null, localStream=null, remoteStream=null;
 let callWith=null, myCode='', isMuted=false;
+let callStart=null, timerInterval=null;
 
 // UI
 const myCodeInput=document.getElementById('myCode');
@@ -110,18 +89,17 @@ const registerBtn=document.getElementById('registerBtn');
 const friendCodeInput=document.getElementById('friendCode');
 const callBtn=document.getElementById('callBtn');
 const historyList=document.getElementById('history');
-const notificationsDiv=document.getElementById('notifications');
 const remoteGainSlider=document.getElementById('remoteGain');
 const remoteVal=document.getElementById('remoteVal');
 const applyLocalGainChk=document.getElementById('applyLocalGain');
 const localGainSlider=document.getElementById('localGain');
 const localVal=document.getElementById('localVal');
-const callControls=document.getElementById('callControls');
+const callInterface=document.getElementById('callInterface');
+const callStatus=document.getElementById('callStatus');
+const callTimer=document.getElementById('callTimer');
 const hangupBtn=document.getElementById('hangupBtn');
 const muteBtn=document.getElementById('muteBtn');
 const remoteAudio=document.getElementById('remoteAudio');
-
-const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 // =================== Historique ===================
 function addHistory(code){
@@ -143,54 +121,62 @@ function renderHistory(){
   });
 }
 
-// =================== Notifications ===================
-function showNotification(html){
-  const n=document.createElement('div');
-  n.className='notification';
-  n.innerHTML=html;
-  notificationsDiv.appendChild(n);
-  setTimeout(()=>notificationsDiv.removeChild(n),10000);
-}
-
 // =================== WebSocket ===================
 ws.onmessage=async ev=>{
   const msg=JSON.parse(ev.data);
-  if(msg.type==='registered'){ myCode=msg.code; localStorage.setItem('myCode', myCode); showNotification('Code enregistré: '+myCode); }
+  if(msg.type==='registered'){ myCode=msg.code; localStorage.setItem('myCode', myCode);}
   else if(msg.type==='incoming-call'){ 
     const caller=msg.from;
-    showNotification(`<strong>${caller} t'appelle</strong><br/>
-      <button onclick="answerCall('${caller}')">Répondre</button>
-      <button onclick="rejectCall('${caller}')">Raccrocher</button>`); 
+    startInterface(caller,'incoming');
   }
-  else if(msg.type==='call-accepted'){ callWith=msg.with; showNotification('Appel accepté avec '+callWith); startCall(true); addHistory(callWith); showCallControls(true); }
-  else if(msg.type==='call-rejected'){ showNotification('Ton appel a été refusé par '+msg.from); }
+  else if(msg.type==='call-accepted'){ callWith=msg.with; startCall(true); addHistory(callWith);}
+  else if(msg.type==='call-rejected'){ alert('Ton appel a été refusé'); }
   else if(msg.type==='signal'){ handleSignal(msg.payload); }
 };
 
 // =================== Buttons ===================
 registerBtn.onclick=()=>{ const c=myCodeInput.value.trim(); if(!c) return alert('Tape ton code'); ws.send(JSON.stringify({cmd:'register', code:c})); }
-callBtn.onclick=()=>{ const c=friendCodeInput.value.trim(); if(!c) return alert('Tape un code ami'); callFriend(c); }
-function callFriend(code){ ws.send(JSON.stringify({cmd:'call', target:code})); addHistory(code); }
+callBtn.onclick=()=>{ const c=friendCodeInput.value.trim(); if(!c) return alert('Tape un code ami'); callFriend(c);}
+function callFriend(code){ ws.send(JSON.stringify({cmd:'call', target:code})); addHistory(code); startInterface(code,'calling'); }
+
+// =================== Interface centrale ===================
+function startInterface(code,type){
+  callInterface.style.display='block';
+  if(type==='calling'){ callStatus.textContent='Appel en cours...'; startTimer(false); }
+  else if(type==='incoming'){ callStatus.textContent=`${code} t'appelle...`; callTimer.textContent='00:00'; }
+}
+
+// Timer
+function startTimer(startNow){
+  clearInterval(timerInterval);
+  callStart = startNow?Date.now():null;
+  if(!callStart) return;
+  timerInterval=setInterval(()=>{
+    const diff=Math.floor((Date.now()-callStart)/1000);
+    const m=Math.floor(diff/60).toString().padStart(2,'0');
+    const s=(diff%60).toString().padStart(2,'0');
+    callTimer.textContent=`${m}:${s}`;
+  },1000);
+}
 
 // =================== Answer / Reject ===================
-function answerCall(from){ ws.send(JSON.stringify({cmd:'answer', from})); callWith=from; startCall(false); addHistory(from); showCallControls(true);}
-function rejectCall(from){ ws.send(JSON.stringify({cmd:'reject', from})); }
+function answerCall(from){ ws.send(JSON.stringify({cmd:'answer', from})); callWith=from; startCall(false); addHistory(from); callStatus.textContent='Appel en cours...'; startTimer(true);}
+function rejectCall(from){ ws.send(JSON.stringify({cmd:'reject', from})); callInterface.style.display='none';}
 
 // =================== WebRTC ===================
 async function startCall(isCaller){
   if(!localStream){ localStream=await navigator.mediaDevices.getUserMedia({audio:true}); }
-  pc=new RTCPeerConnection({iceServers:ICE_SERVERS});
+  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
   pc.ontrack=e=>{ remoteStream=e.streams[0]; remoteAudio.srcObject=remoteStream; }
   pc.onicecandidate=e=>{ if(e.candidate) ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{candidate:e.candidate}})); }
   localStream.getTracks().forEach(track=>pc.addTrack(track, localStream));
   if(isCaller){ const offer=await pc.createOffer(); await pc.setLocalDescription(offer); ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}})); }
 }
-async function handleSignal(payload){ if(!pc) await startCall(false); if(payload.sdp){ await pc.setRemoteDescription(payload.sdp); if(payload.sdp.type==='offer'){ const answer=await pc.createAnswer(); await pc.setLocalDescription(answer); ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}})); } } else if(payload.candidate){ try{ await pc.addIceCandidate(payload.candidate);} catch{} } }
+async function handleSignal(payload){ if(!pc) await startCall(false); if(payload.sdp){ await pc.setRemoteDescription(payload.sdp); if(payload.sdp.type==='offer'){ const answer=await pc.createAnswer(); await pc.setLocalDescription(answer); ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}})); startTimer(true);} } else if(payload.candidate){ try{ await pc.addIceCandidate(payload.candidate);} catch{} }}
 
 // =================== Call Controls ===================
-function showCallControls(show){ callControls.style.display=show?'flex':'none'; }
-hangupBtn.onclick=()=>{ if(pc){ pc.close(); pc=null;} callWith=null; showCallControls(false); showNotification('Appel terminé'); }
-muteBtn.onclick=()=>{ if(!localStream) return; isMuted=!isMuted; localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted); muteBtn.innerHTML=isMuted?'<i class="fa fa-microphone-slash"></i> Micro coupé':'<i class="fa fa-microphone"></i> Couper micro'; }
+hangupBtn.onclick=()=>{ if(pc){ pc.close(); pc=null;} callWith=null; callInterface.style.display='none'; clearInterval(timerInterval); callTimer.textContent='00:00'; }
+muteBtn.onclick=()=>{ if(!localStream) return; isMuted=!isMuted; localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted); muteBtn.innerHTML=isMuted?'<i class="fa fa-microphone-slash"></i> Micro coupé':'<i class="fa fa-microphone"></i> Couper micro';}
 
 // =================== Sliders ===================
 remoteGainSlider.oninput=()=>{ remoteVal.textContent=remoteGainSlider.value+'%'; if(remoteAudio) remoteAudio.volume=remoteGainSlider.value/100; }
