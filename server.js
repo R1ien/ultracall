@@ -1,41 +1,64 @@
+const express = require('express');
+const app = express();
+const http = require('http').createServer(app);
 const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 8080 });
+const wss = new WebSocket.Server({ server: http });
 
-const users = {}; // { code: ws }
+const clients = {}; // code -> ws
+
+app.use(express.static('public'));
 
 wss.on('connection', ws => {
-  ws.on('message', message => {
-    let data;
-    try{ data = JSON.parse(message); }catch{ return; }
-    const { cmd, code, target, from, payload } = data;
+  ws.on('message', msg => {
+    const data = JSON.parse(msg);
 
-    if(cmd==='register'){
-      ws.code = code;
-      users[code] = ws;
-      ws.send(JSON.stringify({type:'registered', code}));
+    if(data.cmd === 'register'){
+      ws.myCode = data.code;
+      clients[data.code] = ws;
+      ws.send(JSON.stringify({ type: 'registered', code: data.code }));
     }
-    else if(cmd==='call'){
-      if(users[target]){
-        users[target].send(JSON.stringify({type:'incoming-call', from:ws.code}));
-      } else { ws.send(JSON.stringify({type:'call-rejected'})); }
+
+    if(data.cmd === 'call'){
+      const target = clients[data.target];
+      if(target) target.send(JSON.stringify({ type: 'incoming-call', from: ws.myCode }));
     }
-    else if(cmd==='answer'){
-      if(users[from]) users[from].send(JSON.stringify({type:'call-accepted', with:ws.code}));
+
+    if(data.cmd === 'answer'){
+      const target = clients[data.from];
+      if(target) target.send(JSON.stringify({ type: 'call-accepted', with: ws.myCode }));
     }
-    else if(cmd==='hangup'){
-      if(users[from]) users[from].send(JSON.stringify({type:'hangup'}));
+
+    if(data.cmd === 'reject'){
+      const target = clients[data.from];
+      if(target) target.send(JSON.stringify({ type: 'call-rejected', from: ws.myCode }));
     }
-    else if(cmd==='mute'){
-      if(users[from]) users[from].send(JSON.stringify({type:'mute', muted:data.muted}));
+
+    if(data.cmd === 'mute'){
+      const target = clients[data.target];
+      if(target){
+        target.send(JSON.stringify({ type: 'mute-status', from: ws.myCode, muted: data.muted }));
+      }
     }
-    else if(cmd==='signal'){
-      if(users[target]) users[target].send(JSON.stringify({type:'signal', payload}));
+
+    if(data.cmd === 'hangup'){
+      const target = clients[data.target];
+      if(target){
+        target.send(JSON.stringify({ type: 'hangup', from: ws.myCode }));
+      }
+    }
+
+    if(data.cmd === 'signal'){
+      const target = clients[data.target];
+      if(target){
+        target.send(JSON.stringify({ type:'signal', payload: data.payload }));
+      }
     }
   });
 
   ws.on('close', ()=>{
-    if(ws.code) delete users[ws.code];
+    if(ws.myCode) delete clients[ws.myCode];
   });
 });
 
-console.log("Serveur WS lancé sur ws://localhost:8080");
+http.listen(8080, ()=>console.log('Serveur lancé sur http://localhost:8080'));
+
