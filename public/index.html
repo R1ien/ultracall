@@ -133,8 +133,11 @@ ws.onmessage=async ev=>{
     case 'incoming-call': callWith=msg.from; startInterface(msg.from,'incoming'); break;
     case 'call-accepted': callWith=msg.with; startCall(true); addHistory(callWith); callStatus.textContent='Appel en cours...'; startTimer(true); break;
     case 'call-rejected': endCall(); alert('Ton appel a été refusé'); break;
-    case 'hangup': endCall(); alert('L\'autre personne a raccroché'); break;
-    case 'mute': alert(msg.muted?'L\'autre personne a coupé son micro':'L\'autre personne a réactivé son micro'); break;
+    case 'hangup': 
+      endCall(); 
+      alert('L\'autre personne a raccroché'); 
+      break;
+    case 'mute': alert(msg.muted ? 'L\'autre personne a coupé son micro' : 'L\'autre personne a réactivé son micro'); break;
     case 'signal': handleSignal(msg.payload); break;
   }
 };
@@ -190,7 +193,12 @@ muteBtn.onclick=()=>{
 
 function endCall(){
   if(pc){ pc.close(); pc=null;}
-  callWith=null; callInterface.style.display='none'; clearInterval(timerInterval); callTimer.textContent='00:00';
+  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null;}
+  remoteAudio.srcObject=null;
+  callWith=null;
+  callInterface.style.display='none';
+  clearInterval(timerInterval);
+  callTimer.textContent='00:00';
 }
 
 // =================== WebRTC ===================
