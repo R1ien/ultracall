@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Appel vocal entre amis</title>
 <style>
-body {font-family: 'Segoe UI', sans-serif; background:#f2f5f7; color:#333; margin:0;padding:0;}
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #f2f5f7;
+  color: #333;
+  margin:0;padding:0;
+}
 header {background:#4e8cff;color:#fff;padding:15px;text-align:center;font-size:1.5em;}
 .container {padding:20px;max-width:800px;margin:auto;}
 button,input{padding:8px 12px;margin:4px;border-radius:6px;border:1px solid #ccc;font-size:1em;}
@@ -25,66 +30,69 @@ label{display:block;margin-top:6px;font-size:0.9em;}
 
 <header>Appel vocal entre amis</header>
 <div class="container">
-<h3>Ton code d'ami :</h3>
-<input id="myCode" placeholder="Ex: ABC123" />
-<button id="registerBtn">Enregistrer</button>
+  <h3>Ton code d'ami :</h3>
+  <input id="myCode" placeholder="Ex: ABC123" />
+  <button id="registerBtn">Enregistrer</button>
 
-<h3>Appeler un ami :</h3>
-<input id="friendCode" placeholder="Code ami"/>
-<button id="callBtn">Appeler</button>
+  <h3>Appeler un ami :</h3>
+  <input id="friendCode" placeholder="Code ami"/>
+  <button id="callBtn">Appeler</button>
 
-<div class="slider-container">
-<label>Volume reçu: <span id="remoteVal">100%</span></label>
-<input id="remoteGain" type="range" min="0" max="200" value="100" />
-</div>
+  <div class="slider-container">
+    <label>Volume reçu: <span id="remoteVal">100%</span></label>
+    <input id="remoteGain" type="range" min="0" max="200" value="100" />
+  </div>
 
-<div class="slider-container">
-<label>Amplifier mon micro:</label>
-<input type="checkbox" id="applyLocalGain" />
-<label>Gain micro local: <span id="localVal">100%</span></label>
-<input type="range" id="localGain" min="0" max="200" value="100"/>
-</div>
+  <div class="slider-container">
+    <label>Amplifier mon micro:</label>
+    <input type="checkbox" id="applyLocalGain" />
+    <label>Gain micro local: <span id="localVal">100%</span></label>
+    <input type="range" id="localGain" min="0" max="200" value="100"/>
+  </div>
 
-<div id="callControls">
-<button id="hangupBtn">Raccrocher</button>
-<button id="muteBtn">Couper micro</button>
-</div>
+  <div id="callControls">
+    <button id="hangupBtn">Raccrocher</button>
+    <button id="muteBtn">Couper micro</button>
+  </div>
 
-<h3>Historique des appels :</h3>
-<ul id="history"></ul>
+  <h3>Historique des appels :</h3>
+  <ul id="history"></ul>
 </div>
 
 <div id="notifications"></div>
-<audio id="fallbackRemote" autoplay style="display:none"></audio>
+
+<audio id="remoteAudio" autoplay></audio>
 
 <script>
 const ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
-let localStream=null, localProcessedStream=null, pc=null, remoteStream=null;
-let audioCtxRemote=null, remoteGainNode=null, audioCtxLocal=null, localGainNode=null, localSourceNode=null, localDestination=null;
-let myCode='', callWith=null, isMuted=false;
 
-const registerBtn = document.getElementById('registerBtn');
-const myCodeInput = document.getElementById('myCode');
-const friendCodeInput = document.getElementById('friendCode');
-const callBtn = document.getElementById('callBtn');
-const historyList = document.getElementById('history');
-const notificationsDiv = document.getElementById('notifications');
-const remoteGainSlider = document.getElementById('remoteGain');
-const remoteVal = document.getElementById('remoteVal');
-const applyLocalGainChk = document.getElementById('applyLocalGain');
-const localGainSlider = document.getElementById('localGain');
-const localVal = document.getElementById('localVal');
-const fallbackRemote = document.getElementById('fallbackRemote');
-const callControls = document.getElementById('callControls');
-const hangupBtn = document.getElementById('hangupBtn');
-const muteBtn = document.getElementById('muteBtn');
+let pc=null, localStream=null, remoteStream=null;
+let audioCtxRemote=null, remoteGainNode=null;
+let localAudioContext=null, localGainNode=null, localSourceNode=null, localDestination=null;
+let callWith=null, myCode='', isMuted=false;
 
-const ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'turn:relay.metered.ca:80', username:'openai', credential:'openai123'}
-];
+// UI
+const myCodeInput=document.getElementById('myCode');
+const registerBtn=document.getElementById('registerBtn');
+const friendCodeInput=document.getElementById('friendCode');
+const callBtn=document.getElementById('callBtn');
+const historyList=document.getElementById('history');
+const notificationsDiv=document.getElementById('notifications');
+const remoteGainSlider=document.getElementById('remoteGain');
+const remoteVal=document.getElementById('remoteVal');
+const applyLocalGainChk=document.getElementById('applyLocalGain');
+const localGainSlider=document.getElementById('localGain');
+const localVal=document.getElementById('localVal');
+const callControls=document.getElementById('callControls');
+const hangupBtn=document.getElementById('hangupBtn');
+const muteBtn=document.getElementById('muteBtn');
+const remoteAudio=document.getElementById('remoteAudio');
 
-// ===== Historique =====
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+// ===================
+// Historique
+// ===================
 function addHistory(code){
   let list = JSON.parse(localStorage.getItem('callHistory')||'[]');
   if(!list.includes(code)) list.push(code);
@@ -95,29 +103,35 @@ function renderHistory(){
   historyList.innerHTML='';
   let list = JSON.parse(localStorage.getItem('callHistory')||'[]');
   list.forEach(code=>{
-    const li = document.createElement('li');
-    const btn = document.createElement('button');
-    btn.textContent = 'Appeler '+code;
+    const li=document.createElement('li');
+    const btn=document.createElement('button');
+    btn.textContent='Appeler '+code;
     btn.onclick=()=>callFriend(code);
     li.appendChild(btn);
     historyList.appendChild(li);
   });
 }
 
-// ===== Notifications =====
+// ===================
+// Notifications
+// ===================
 function showNotification(html){
-  const n = document.createElement('div'); n.className='notification'; n.innerHTML=html;
+  const n=document.createElement('div');
+  n.className='notification';
+  n.innerHTML=html;
   notificationsDiv.appendChild(n);
   setTimeout(()=>notificationsDiv.removeChild(n),10000);
 }
 
-// ===== WebSocket =====
-ws.onmessage=ev=>{
+// ===================
+// WebSocket
+// ===================
+ws.onmessage=async ev=>{
   const msg=JSON.parse(ev.data);
-  if(msg.type==='registered') { 
-    myCode=msg.code; 
+  if(msg.type==='registered'){
+    myCode=msg.code;
     localStorage.setItem('myCode', myCode);
-    showNotification('Code enregistré: '+myCode); 
+    showNotification('Code enregistré: '+myCode);
   }
   else if(msg.type==='incoming-call'){
     const caller=msg.from;
@@ -128,40 +142,60 @@ ws.onmessage=ev=>{
   else if(msg.type==='call-accepted'){
     callWith=msg.with;
     showNotification('Appel accepté avec '+callWith);
-    startWebRTC(true);
+    startCall(true);
     addHistory(callWith);
     showCallControls(true);
   }
   else if(msg.type==='call-rejected'){
     showNotification('Ton appel a été refusé par '+msg.from);
   }
-  else if(msg.type==='mute-status'){
-    showNotification(msg.muted ? `${msg.from} a coupé son micro` : `${msg.from} a réactivé son micro`);
+  else if(msg.type==='signal'){
+    handleSignal(msg.payload);
   }
-  else if(msg.type==='hangup'){
-    showNotification(`${msg.from} a raccroché`);
-    endCall(); // <-- Ferme la connexion WebRTC
-  }
-  else if(msg.type==='signal') handleSignal(msg.payload);
 };
 
-// ===== Buttons =====
-registerBtn.onclick=()=>{ const c=myCodeInput.value.trim(); if(!c) return alert('Tape ton code'); ws.send(JSON.stringify({cmd:'register', code:c})); };
-callBtn.onclick=()=>{ const c=friendCodeInput.value.trim(); if(!c) return alert('Tape un code ami'); callFriend(c); };
-function callFriend(code){ ws.send(JSON.stringify({cmd:'call', target:code})); addHistory(code); }
-function answerCall(from){ ws.send(JSON.stringify({cmd:'answer', from})); callWith=from; startWebRTC(false); addHistory(from); showCallControls(true); }
+// ===================
+// Buttons
+// ===================
+registerBtn.onclick=()=>{
+  const c=myCodeInput.value.trim();
+  if(!c) return alert('Tape ton code');
+  ws.send(JSON.stringify({cmd:'register', code:c}));
+};
+callBtn.onclick=()=>{ const c=friendCodeInput.value.trim(); if(!c) return alert('Tape un code ami'); callFriend(c);}
+function callFriend(code){
+  ws.send(JSON.stringify({cmd:'call', target:code}));
+  addHistory(code);
+}
+
+// ===================
+// Answer / reject
+// ===================
+function answerCall(from){
+  ws.send(JSON.stringify({cmd:'answer', from}));
+  callWith=from;
+  startCall(false);
+  addHistory(from);
+  showCallControls(true);
+}
 function rejectCall(from){ ws.send(JSON.stringify({cmd:'reject', from})); }
 
-// ===== WebRTC =====
-async function startWebRTC(isCaller){
+// ===================
+// WebRTC
+// ===================
+async function startCall(isCaller){
+  if(!localStream){
+    localStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  }
   pc=new RTCPeerConnection({iceServers:ICE_SERVERS});
-  pc.addTransceiver('audio',{direction:'sendrecv'});
-
-  pc.ontrack=e=>{ remoteStream=e.streams[0]; handleRemoteStream(remoteStream); };
+  pc.ontrack=e=>{
+    remoteStream=e.streams[0];
+    remoteAudio.srcObject=remoteStream;
+  };
   pc.onicecandidate=e=>{ if(e.candidate) ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{candidate:e.candidate}})); };
 
-  await prepareLocalStream();
-  addLocalTracks();
+  // Ajouter les pistes locales à chaque fois
+  localStream.getTracks().forEach(track=>pc.addTrack(track, localStream));
 
   if(isCaller){
     const offer=await pc.createOffer();
@@ -170,7 +204,7 @@ async function startWebRTC(isCaller){
   }
 }
 async function handleSignal(payload){
-  if(!pc) await startWebRTC(false);
+  if(!pc) await startCall(false);
   if(payload.sdp){
     await pc.setRemoteDescription(payload.sdp);
     if(payload.sdp.type==='offer'){
@@ -179,85 +213,29 @@ async function handleSignal(payload){
       ws.send(JSON.stringify({cmd:'signal', target:callWith, payload:{sdp:pc.localDescription}}));
     }
   }else if(payload.candidate){
-    try{ await pc.addIceCandidate(payload.candidate);} catch(e){}
+    try{ await pc.addIceCandidate(payload.candidate);} catch{}
   }
 }
 
-// ===== Audio =====
-async function prepareLocalStream(){
-  if(!localStream) localStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
-  if(applyLocalGainChk.checked){
-    if(audioCtxLocal){try{audioCtxLocal.close();}catch{}}
-    audioCtxLocal=new (window.AudioContext||window.webkitAudioContext)();
-    localSourceNode=audioCtxLocal.createMediaStreamSource(localStream);
-    localGainNode=audioCtxLocal.createGain();
-    localGainNode.gain=Number(localGainSlider.value)/100;
-    localDestination=audioCtxLocal.createMediaStreamDestination();
-    localSourceNode.connect(localGainNode).connect(localDestination);
-    localProcessedStream=localDestination.stream;
-  } else localProcessedStream=null;
-}
-function addLocalTracks(){
-  if(!pc) return;
-  pc.getSenders().forEach(s=>{if(s.track&&s.track.kind==='audio'){try{pc.removeTrack(s);}catch{}}});
-  const streamToUse=(applyLocalGainChk.checked&&localProcessedStream)?localProcessedStream:localStream;
-  if(!streamToUse) return;
-  streamToUse.getAudioTracks().forEach(track=>pc.addTrack(track,streamToUse));
-}
-function handleRemoteStream(stream){
-  if(audioCtxRemote){try{audioCtxRemote.close();}catch{} audioCtxRemote=null; remoteGainNode=null; }
-  audioCtxRemote=new (window.AudioContext||window.webkitAudioContext)();
-  const source=audioCtxRemote.createMediaStreamSource(stream);
-  remoteGainNode=audioCtxRemote.createGain();
-  remoteGainNode.gain=Number(remoteGainSlider.value)/100;
-  source.connect(remoteGainNode).connect(audioCtxRemote.destination);
-  fallbackRemote.srcObject=stream;
-  remoteStream=stream;
-}
+// ===================
+// Call Controls
+// ===================
+function showCallControls(show){ callControls.style.display=show?'block':'none'; }
+hangupBtn.onclick=()=>{ if(pc){ pc.close(); pc=null;} callWith=null; showCallControls(false); showNotification('Appel terminé'); };
+muteBtn.onclick=()=>{ if(!localStream) return; isMuted=!isMuted; localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted); muteBtn.textContent=isMuted?'Micro coupé':'Couper micro'; };
 
-// ===== Sliders =====
-remoteGainSlider.oninput=()=>{ remoteVal.textContent=remoteGainSlider.value+'%'; if(remoteGainNode) remoteGainNode.gain=Number(remoteGainSlider.value)/100; };
-localGainSlider.oninput=()=>{ localVal.textContent=localGainSlider.value+'%'; if(localGainNode) localGainNode.gain=Number(localGainSlider.value)/100; };
+// ===================
+// Sliders
+// ===================
+remoteGainSlider.oninput=()=>{ remoteVal.textContent=remoteGainSlider.value+'%'; if(remoteAudio) remoteAudio.volume=remoteGainSlider.value/100; };
+localGainSlider.oninput=()=>{ localVal.textContent=localGainSlider.value+'%'; };
 
-// ===== Call Controls =====
-function showCallControls(show){ callControls.style.display = show?'block':'none'; }
-function endCall(){
-  if(pc){
-    pc.getSenders().forEach(s=>{ if(s.track) s.track.stop(); });
-    pc.close(); 
-    pc = null;
-  }
-  if(remoteStream){
-    remoteStream.getTracks().forEach(t=>t.stop());
-    fallbackRemote.srcObject = null;
-    remoteStream = null;
-  }
-  callWith = null;
-  showCallControls(false);
-}
-
-hangupBtn.onclick = ()=>{ 
-  if(callWith) ws.send(JSON.stringify({cmd:'hangup', target:callWith}));
-  endCall();
-  showNotification('Appel terminé'); 
-};
-
-muteBtn.onclick=()=>{
-  if(!localStream) return;
-  isMuted=!isMuted;
-  localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted);
-  muteBtn.textContent=isMuted?'Micro coupé':'Couper micro';
-  if(callWith) ws.send(JSON.stringify({cmd:'mute', target:callWith, muted:isMuted}));
-};
-
-// ===== Init =====
+// ===================
+// Init
+// ===================
 window.addEventListener('load',()=>{
-  const savedCode=localStorage.getItem('myCode');
-  if(savedCode){ 
-    myCodeInput.value=savedCode; 
-    myCode = savedCode;
-    ws.addEventListener('open',()=>{ ws.send(JSON.stringify({cmd:'register', code:savedCode})); });
-  }
+  const saved=localStorage.getItem('myCode');
+  if(saved){ myCodeInput.value=saved; myCode=saved; ws.addEventListener('open',()=>ws.send(JSON.stringify({cmd:'register', code:saved}))); }
   renderHistory();
 });
 </script>
