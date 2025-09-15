@@ -130,10 +130,7 @@ function wsSend(obj) {
 ws.addEventListener('open', () => {
   while (sendQueue.length) ws.send(sendQueue.shift());
   const saved = localStorage.getItem('myCode');
-  if (saved) {
-    myCode = saved;
-    wsSend({ cmd: 'register', code: myCode });
-  }
+  if (saved) { myCode = saved; wsSend({ cmd: 'register', code: myCode }); }
 });
 ws.addEventListener('close', ()=> {
   setTimeout(()=>{ ws = new WebSocket(WS_URL); ws.addEventListener('open', ()=>{ while(sendQueue.length) ws.send(sendQueue.shift()); }); }, 1200);
@@ -182,14 +179,6 @@ function showNotification(html, timeout = 8000) {
   notificationsDiv.prepend(n);
   if (timeout > 0) setTimeout(() => { if (n.parentNode) n.parentNode.removeChild(n); }, timeout);
 }
-
-// 🔹 Débloque la sonnerie sur premier clic
-function unlockAudio() {
-  ringtone.play().then(()=>{ ringtone.pause(); ringtone.currentTime=0; }).catch(()=>{});
-  document.removeEventListener('click', unlockAudio);
-}
-document.addEventListener('click', unlockAudio);
-
 function playRingtone(){ ringtone.currentTime = 0; ringtone.play().catch(()=>{}); }
 function stopRingtone(){ try{ ringtone.pause(); ringtone.currentTime = 0; }catch(e){} }
 
@@ -277,8 +266,6 @@ ws.addEventListener('message', async (ev) => {
     case 'error':
       showNotification(`Erreur: ${msg.message}`, 4000);
       break;
-
-    default: break;
   }
 });
 
@@ -328,9 +315,7 @@ function rejectCall(from) {
 async function prepareLocalAudio() {
   if (localStream) return localStream;
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true }
-    });
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
     return localStream;
   } catch (e) {
     alert('Erreur accès micro: ' + (e.message || e));
@@ -341,9 +326,18 @@ async function prepareLocalAudio() {
 async function startCall(isCaller) {
   await prepareLocalAudio();
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; startTimer(); };
-  pc.onicecandidate = (e) => { if (e.candidate && callWith) wsSend({ cmd: 'signal', target: callWith, payload: { candidate: e.candidate } }); };
+
+  pc.ontrack = (e) => {
+    remoteAudio.srcObject = e.streams[0];
+    startTimer();
+  };
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate && callWith) wsSend({ cmd: 'signal', target: callWith, payload: { candidate: e.candidate } });
+  };
+
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
   if (isCaller) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -354,6 +348,7 @@ async function startCall(isCaller) {
 async function handleSignal(payload, from) {
   if (!payload) return;
   if (!pc) await startCall(false);
+
   if (payload.sdp) {
     await pc.setRemoteDescription(payload.sdp);
     if (payload.sdp.type === 'offer') {
@@ -362,7 +357,7 @@ async function handleSignal(payload, from) {
       wsSend({ cmd: 'signal', target: from || callWith, payload: { sdp: pc.localDescription } });
     }
   } else if (payload.candidate) {
-    try { await pc.addIceCandidate(payload.candidate); } catch(e){ console.warn('ICE add error', e); }
+    try { await pc.addIceCandidate(payload.candidate); } catch (e) { console.warn('ICE add error', e); }
   }
 }
 
@@ -373,47 +368,78 @@ hangupBtn.addEventListener('click', () => {
   location.reload();
 });
 
-// 🔹 Bouton mute micro réel
+// Mute button fonctionnel
 muteBtn.addEventListener('click', () => {
   if (!localStream) return;
   const track = localStream.getAudioTracks()[0];
   if (!track) return;
   track.enabled = !track.enabled;
   isMuted = !track.enabled;
-muteBtn.innerHTML = track.enabled ? '<i class="fa fa-microphone"></i>' : '<i class="fa fa-microphone-slash"></i>';
+  muteBtn.innerHTML = track.enabled ? '<i class="fa fa-microphone"></i>' : '<i class="fa fa-microphone-slash"></i>';
 });
 
-function endCallAndReload() { cleanupPeer(); setTimeout(() => location.reload(), 900); }
+function endCallAndReload() {
+  cleanupPeer();
+  setTimeout(() => location.reload(), 900);
+}
 
 /* ========= UI: Interface central + timer ========= */
-function showInterface(show, status = 'Appel en cours...') { interfaceCall.style.display = show ? 'block' : 'none'; callStatus.textContent = status; if(!show) stopTimer(); }
+function showInterface(show, status = 'Appel en cours...') {
+  interfaceCall.style.display = show ? 'block' : 'none';
+  callStatus.textContent = status;
+  if (!show) stopTimer();
+}
 function hideInterface() { showInterface(false); }
 
 function startTimer() {
-seconds = 0; timerEl.textContent = '00:00';
-if (callTimer) clearInterval(callTimer);
-callTimer = setInterval(() => { seconds++; const m=String(Math.floor(seconds/60)).padStart(2,'0'); const s=String(seconds%60).padStart(2,'0'); timerEl.textContent=${m}:${s}; },1000);
+  seconds = 0; timerEl.textContent = '00:00';
+  if (callTimer) clearInterval(callTimer);
+  callTimer = setInterval(() => {
+    seconds++;
+    const m = String(Math.floor(seconds/60)).padStart(2,'0');
+    const s = String(seconds%60).padStart(2,'0');
+    timerEl.textContent = `${m}:${s}`;
+  }, 1000);
 }
-function stopTimer(){ if(callTimer) clearInterval(callTimer); timerEl.textContent='00:00'; }
+function stopTimer() { if (callTimer) clearInterval(callTimer); timerEl.textContent = '00:00'; }
 
 /* ========= Cleanup ========= */
 function cleanupPeer(){
-try{ if(pc) pc.close(); } catch(e){}
-pc=null;
-try{ if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; } } catch(e){}
-stopTimer();
+  try { if (pc) pc.close(); } catch(e){}
+  pc = null;
+  try {
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+  } catch(e){}
+  stopTimer();
 }
 
 /* ========= sliders & UI bindings ========= */
-remoteGain.addEventListener('input', ()=>{ remoteVal.textContent=remoteGain.value+'%'; if(remoteAudio) remoteAudio.volume=Number(remoteGain.value)/100; });
-localGain.addEventListener('input', ()=>{ localVal.textContent=localGain.value+'%'; });
+remoteGain.addEventListener('input', () => {
+  remoteVal.textContent = remoteGain.value + '%';
+  if (remoteAudio) remoteAudio.volume = Number(remoteGain.value) / 100;
+});
+localGain.addEventListener('input', () => { localVal.textContent = localGain.value + '%'; });
+
+/* ========= unlock ringtone autoplay ========= */
+function unlockAudio() {
+  ringtone.play().then(()=>{ ringtone.pause(); ringtone.currentTime=0; }).catch(()=>{});
+  document.removeEventListener('click', unlockAudio);
+}
+document.addEventListener('click', unlockAudio);
 
 /* ========= misc init ========= */
 window.addEventListener('load', () => {
-renderHistory();
-const saved = localStorage.getItem('myCode');
-if(saved){ myCode=saved; myCodeInput.value=saved; if(ws.readyState===WebSocket.OPEN) wsSend({cmd:'register', code:saved}); }
+  renderHistory();
+  const saved = localStorage.getItem('myCode');
+  if (saved) {
+    myCode = saved;
+    myCodeInput.value = saved;
+    if (ws.readyState === WebSocket.OPEN) wsSend({ cmd: 'register', code: saved });
+  }
 });
 </script>
-
-</body> </html> 
+</body>
+</html>
