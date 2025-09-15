@@ -130,7 +130,7 @@ function wsSend(obj) {
 ws.addEventListener('open', () => {
   while (sendQueue.length) ws.send(sendQueue.shift());
   const saved = localStorage.getItem('myCode');
-  if (saved) { myCode = saved; wsSend({ cmd: 'register', code: myCode }); }
+  if (saved) { myCode = saved; wsSend({ cmd: 'register', code: saved }); }
 });
 ws.addEventListener('close', ()=> {
   setTimeout(()=>{ ws = new WebSocket(WS_URL); ws.addEventListener('open', ()=>{ while(sendQueue.length) ws.send(sendQueue.shift()); }); }, 1200);
@@ -430,6 +430,33 @@ function unlockAudio() {
 }
 document.addEventListener('click', unlockAudio);
 
+/* ========= Draggable interface ========= */
+(function() {
+  let isDragging = false, offsetX = 0, offsetY = 0;
+  interfaceCall.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    isDragging = true;
+    const rect = interfaceCall.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    interfaceCall.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    interfaceCall.style.left = (e.clientX - offsetX) + 'px';
+    interfaceCall.style.top = (e.clientY - offsetY) + 'px';
+    interfaceCall.style.transform = 'none';
+  });
+  window.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      interfaceCall.style.cursor = 'grab';
+    }
+  });
+  interfaceCall.style.cursor = 'grab';
+})();
+
 /* ========= misc init ========= */
 window.addEventListener('load', () => {
   renderHistory();
@@ -440,40 +467,6 @@ window.addEventListener('load', () => {
     if (ws.readyState === WebSocket.OPEN) wsSend({ cmd: 'register', code: saved });
   }
 });
-  /* ========= draggable interface ========= */
-(function() {
-  let isDragging = false, offsetX = 0, offsetY = 0;
-
-  interfaceCall.addEventListener('mousedown', (e) => {
-    // clic gauche seulement
-    if (e.button !== 0) return;
-    isDragging = true;
-    // position relative au coin supérieur gauche de la boîte
-    const rect = interfaceCall.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
-    interfaceCall.style.cursor = 'grabbing';
-  });
-
-  window.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    interfaceCall.style.left = (e.clientX - offsetX) + 'px';
-    interfaceCall.style.top = (e.clientY - offsetY) + 'px';
-    interfaceCall.style.transform = 'none'; // on enlève le translate pour le drag
-  });
-
-  window.addEventListener('mouseup', () => {
-    if (isDragging) {
-      isDragging = false;
-      interfaceCall.style.cursor = 'grab';
-    }
-  });
-
-  // style par défaut
-  interfaceCall.style.cursor = 'grab';
-})();
-
 </script>
 </body>
 </html>
-
