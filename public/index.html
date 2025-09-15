@@ -87,7 +87,7 @@ const ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+locatio
 let pc=null, localStream=null, remoteStream=null;
 let callWith=null, myCode='', isMuted=false, callTimer=null, seconds=0;
 
-// UI
+// UI refs
 const myCodeInput=document.getElementById('myCode');
 const registerBtn=document.getElementById('registerBtn');
 const friendCodeInput=document.getElementById('friendCode');
@@ -96,7 +96,6 @@ const historyList=document.getElementById('history');
 const notificationsDiv=document.getElementById('notifications');
 const remoteGainSlider=document.getElementById('remoteGain');
 const remoteVal=document.getElementById('remoteVal');
-const applyLocalGainChk=document.getElementById('applyLocalGain');
 const localGainSlider=document.getElementById('localGain');
 const localVal=document.getElementById('localVal');
 const interfaceCall=document.getElementById('interfaceCall');
@@ -134,7 +133,7 @@ function showNotification(html){
   n.className='notification';
   n.innerHTML=html;
   notificationsDiv.appendChild(n);
-  setTimeout(()=>notificationsDiv.removeChild(n),10000);
+  setTimeout(()=>{ if(n.parentNode) notificationsDiv.removeChild(n); },10000);
 }
 
 // =================== WebSocket ===================
@@ -183,8 +182,8 @@ function showInterfaceCall(show, text='Appel en cours...'){
 // =================== Call Controls ===================
 hangupBtn.onclick=()=>{ 
   ws.send(JSON.stringify({cmd:'hangup', target:callWith})); 
-  endCall('Tu as raccroché'); 
-}
+  location.reload(); // recharge direct côté appelant
+};
 muteBtn.onclick=()=>{ if(!localStream) return; isMuted=!isMuted; localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted); muteBtn.innerHTML=isMuted?'<i class="fa fa-microphone-slash"></i> Micro coupé':'<i class="fa fa-microphone"></i> Couper micro'; }
 
 // =================== Timer ===================
@@ -194,11 +193,12 @@ function stopTimer(){ if(callTimer) clearInterval(callTimer); timerEl.textConten
 
 // =================== Fin appel ===================
 function endCall(message){
-  showInterfaceCall(false);
   if(pc){ pc.close(); pc=null;}
   callWith=null;
   stopTimer();
+  showInterfaceCall(false);
   showNotification(message);
+  setTimeout(()=>location.reload(),1000); // recharge côté receveur
 }
 
 // =================== Sliders ===================
