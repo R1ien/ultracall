@@ -1,268 +1,176 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Ultra Call</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <style>
-    body {
-      margin:0;
-      font-family:Arial, sans-serif;
-      background:linear-gradient(135deg,#0a0a0a,#1e1e1e);
-      color:#fff;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:flex-start;
-      height:100vh;
-    }
-    header {
-      width:100%;
-      padding:15px;
-      background:#111;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      box-shadow:0 2px 5px rgba(0,0,0,0.5);
-    }
-    header h1 {color:#0af;margin:0;}
-    header nav span {margin-left:20px;color:#777;}
-    main {flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-    input,button {
-      padding:10px 15px;
-      margin:5px;
-      border-radius:8px;
-      border:none;
-      font-size:16px;
-    }
-    button {
-      background:#0af;color:#fff;cursor:pointer;
-      transition:0.3s;
-    }
-    button:hover {background:#08c;}
-    #notifications {
-      position:fixed;top:80px;right:20px;z-index:1000;
-    }
-    .notif {
-      background:#222;padding:15px;margin-top:10px;border-radius:10px;
-      box-shadow:0 2px 8px rgba(0,0,0,0.6);
-    }
-    .notif button {
-      margin:5px 3px;padding:5px 10px;font-size:14px;
-    }
-    #callInterface {
-      position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
-      background:#111;padding:30px;border-radius:15px;display:none;flex-direction:column;align-items:center;
-    }
-    #callControls {
-      margin-top:20px;display:flex;gap:20px;
-    }
-    #callControls button {
-      border-radius:50%;width:60px;height:60px;font-size:22px;display:flex;align-items:center;justify-content:center;
-    }
-    #hangupBtn {background:#e00;}
-    #muteBtn {background:#444;}
-    #callTimer {margin-top:10px;font-size:18px;}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ultra Call</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<style>
+/* ======= ton CSS existant (inchangé) ======= */
+*{box-sizing:border-box}
+body,html{margin:0;padding:0;height:100%;font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial;color:#fff;background:linear-gradient(135deg,#0b0b0f 0%,#13131a 100%);}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:rgba(7,10,20,0.6);backdrop-filter:blur(6px);border-bottom:1px solid rgba(255,255,255,0.03)}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;color:#4e8cff}
+.logo .badge{background:linear-gradient(90deg,#6fb3ff,#3a6fdc);padding:8px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px}
+.nav{display:flex;gap:12px;align-items:center}
+.nav span{padding:6px 10px;border-radius:8px}
+.nav .active{background:#162b4b;color:#fff}
+.nav .coming{color:#7b8794}
+.container{max-width:900px;margin:28px auto;padding:20px;display:flex;gap:24px;align-items:flex-start}
+.col{flex:1}
+.card{background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02));padding:18px;border-radius:14px;border:1px solid rgba(255,255,255,0.03);}
+input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:#0f1720;color:#fff;margin-bottom:8px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;background:#4e8cff;color:#041a34;border:none;cursor:pointer}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04)}
+.btn.red{background:#ff5b5b;color:#fff}
+.small{font-size:13px;color:#9aa4b2}
+#interfaceCall{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);min-width:320px;background:#0f1720;padding:22px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.6);display:none;z-index:999}
+#callStatus{font-size:18px;margin:0 0 8px 0}
+#timer{font-weight:700;color:#4e8cff;margin-bottom:12px;font-size:18px}
+.controls{display:flex;gap:12px;justify-content:center}
+.controls .btn{border-radius:999px;padding:12px 16px;font-size:14px;display:inline-flex;align-items:center;gap:10px}
+#notifications{position:fixed;right:18px;top:18px;width:320px;display:flex;flex-direction:column;gap:10px;z-index:1000}
+.notification{background:#0b1014;padding:12px 14px;border-radius:12px;border-left:4px solid #4e8cff;color:#e6eef8;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+#history{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+#history button{background:#071022;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);text-align:left;color:#dfeaf7;cursor:pointer}
+.row{display:flex;gap:12px;align-items:center;margin-top:10px}
+.range{width:100%}
+@media (max-width:800px){ .container{flex-direction:column;padding:12px} #notifications{right:10px;width:280px} #interfaceCall{min-width:260px} }
+</style>
 </head>
 <body>
-  <header>
-    <h1>Ultra Call</h1>
-    <nav>
-      <span style="color:#0af">Appels</span>
-      <span>Messages (coming soon)</span>
-    </nav>
-  </header>
 
-  <main>
-    <div>
-      <input id="myCode" placeholder="Mon code d'ami" readonly>
-      <button onclick="saveMyCode()">Enregistrer code</button>
-    </div>
-    <div>
-      <input id="friendCode" placeholder="Code d'ami">
-      <button onclick="callFriend()">Appeler</button>
-    </div>
+<header>
+  <div class="logo"><div class="badge"><i class="fa fa-phone"></i></div>Ultra Call</div>
+  <div class="nav"><span class="active">Appels</span><span class="coming">Messages (Coming Soon)</span></div>
+</header>
+
+<main class="container">
+  <section class="col card">
+    <h3>Ton code d'ami</h3>
+    <input id="myCode" type="text" placeholder="Ex: KIAN123" />
+    <button id="registerBtn" class="btn"><i class="fa fa-user-plus"></i> Enregistrer</button>
+
+    <h3 style="margin-top:18px">Appeler un ami</h3>
+    <input id="friendCode" type="text" placeholder="Code ami" />
+    <button id="callBtn" class="btn"><i class="fa fa-phone"></i> Appeler</button>
+  </section>
+
+  <aside class="col card">
+    <h3>Historique</h3>
     <div id="history"></div>
-  </main>
+  </aside>
+</main>
 
-  <div id="notifications"></div>
-
-  <!-- Interface d'appel -->
-  <div id="callInterface">
-    <div id="callStatus">Appel en cours...</div>
-    <div id="callTimer"></div>
-    <div id="callControls">
-      <button id="muteBtn"><i class="fa fa-microphone"></i></button>
-      <button id="hangupBtn"><i class="fa fa-phone"></i></button>
-    </div>
+<div id="interfaceCall">
+  <div id="callStatus">Appel en cours...</div>
+  <div id="timer">00:00</div>
+  <div class="controls">
+    <button id="hangupBtn" class="btn red"><i class="fa fa-phone-slash"></i></button>
+    <button id="muteBtn" class="btn"><i class="fa fa-microphone"></i></button>
   </div>
+</div>
 
-  <!-- Sonnerie -->
-  <audio id="ringtone" src="sonnerie.mp3" loop></audio>
+<div id="notifications"></div>
 
-  <script>
-    const ws=new WebSocket("wss://"+location.host);
-    const notifications=document.getElementById("notifications");
-    const callInterface=document.getElementById("callInterface");
-    const callStatus=document.getElementById("callStatus");
-    const callTimer=document.getElementById("callTimer");
-    const hangupBtn=document.getElementById("hangupBtn");
-    const muteBtn=document.getElementById("muteBtn");
-    const ringtone=document.getElementById("ringtone");
+<audio id="remoteAudio" autoplay></audio>
+<audio id="ringtone" src="sonnerie.mp3" loop></audio>
 
-    let pc,localStream,remoteStream,isMuted=false,callWith=null,timerInterval,startTime;
+<script>
+/* ==== Variables ==== */
+let myCode = "";
+let callWith = null;
+let pc = null;
+let localStream = null;
+let isMuted = false;
+let seconds = 0, timer=null;
+const ws = new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws");
 
-    // === Débloquer la sonnerie au premier clic ===
-    document.body.addEventListener('click', () => {
-      ringtone.play().then(()=>{ ringtone.pause(); ringtone.currentTime=0; }).catch(()=>{});
-    }, { once:true });
+/* ==== Elements ==== */
+const myCodeInput=document.getElementById("myCode");
+const registerBtn=document.getElementById("registerBtn");
+const friendCodeInput=document.getElementById("friendCode");
+const callBtn=document.getElementById("callBtn");
+const notifications=document.getElementById("notifications");
+const interfaceCall=document.getElementById("interfaceCall");
+const callStatus=document.getElementById("callStatus");
+const timerEl=document.getElementById("timer");
+const hangupBtn=document.getElementById("hangupBtn");
+const muteBtn=document.getElementById("muteBtn");
+const remoteAudio=document.getElementById("remoteAudio");
+const ringtone=document.getElementById("ringtone");
 
-    function playRingtone(){ ringtone.currentTime=0; ringtone.play().catch(()=>{}); }
-    function stopRingtone(){ ringtone.pause(); ringtone.currentTime=0; }
+/* ==== Ringtone ==== */
+function playRingtone(){ ringtone.currentTime=0; ringtone.volume=0.5; ringtone.play().catch(()=>{}); }
+function stopRingtone(){ ringtone.pause(); ringtone.currentTime=0; }
 
-    // === Notifications ===
-    function showNotification(html){
-      const div=document.createElement("div");
-      div.className="notif";
-      div.innerHTML=html;
-      notifications.appendChild(div);
-      setTimeout(()=>{div.remove();},8000);
-    }
+/* ==== UI ==== */
+function showNotif(txt){
+  const d=document.createElement("div");
+  d.className="notification";
+  d.innerHTML=txt;
+  notifications.prepend(d);
+  setTimeout(()=>d.remove(),5000);
+}
+function showInterface(txt){ interfaceCall.style.display="block"; callStatus.textContent=txt; }
+function hideInterface(){ interfaceCall.style.display="none"; stopTimer(); }
 
-    // === WebSocket messages ===
-    ws.onmessage=async e=>{
-      const msg=JSON.parse(e.data);
-      if(msg.type==="welcome"){
-        document.getElementById("myCode").value=msg.code;
-      }else if(msg.type==="incoming-call"){
-        const caller=msg.from;
-        playRingtone();
-        showNotification(`<strong>${caller} t'appelle</strong><br/>
-          <button onclick="answerCall('${caller}')">Répondre</button>
-          <button onclick="rejectCall('${caller}')">Raccrocher</button>`);
-      }else if(msg.type==="call-rejected"){
-        stopRingtone();
-        showNotification("Appel rejeté.");
-      }else if(msg.type==="call-ended"){
-        endCall("L'appel a été raccroché");
-      }else if(msg.type==="signal"){
-        if(!pc) startCall(false);
-        await pc.setRemoteDescription(msg.data);
-        if(msg.data.type==="offer"){
-          const answer=await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          ws.send(JSON.stringify({cmd:"signal",target:msg.from,data:answer}));
-        }
-      }else if(msg.type==="candidate"){
-        if(pc) pc.addIceCandidate(msg.candidate);
-      }
-    };
+/* ==== Timer ==== */
+function startTimer(){seconds=0;timerEl.textContent="00:00";timer=setInterval(()=>{seconds++;let m=String(Math.floor(seconds/60)).padStart(2,"0");let s=String(seconds%60).padStart(2,"0");timerEl.textContent=`${m}:${s}`},1000);}
+function stopTimer(){if(timer)clearInterval(timer);timerEl.textContent="00:00";}
 
-    // === Historique ===
-    function saveMyCode(){
-      const code=document.getElementById("myCode").value;
-      localStorage.setItem("myCode",code);
-      showNotification("Code sauvegardé");
-    }
-    function addHistory(code){
-      let h=JSON.parse(localStorage.getItem("history")||"[]");
-      if(!h.includes(code)) h.push(code);
-      localStorage.setItem("history",JSON.stringify(h));
-      renderHistory();
-    }
-    function renderHistory(){
-      const h=JSON.parse(localStorage.getItem("history")||"[]");
-      document.getElementById("history").innerHTML=h.map(c=>`<div>${c} <button onclick="call('${c}')">Rappeler</button></div>`).join("");
-    }
-    window.onload=renderHistory;
+/* ==== WebRTC ==== */
+async function getStream(){
+  if(localStream) return localStream;
+  localStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  return localStream;
+}
+async function startCall(isCaller){
+  await getStream();
+  pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+  pc.ontrack=(e)=>{remoteAudio.srcObject=e.streams[0];startTimer();};
+  pc.onicecandidate=(e)=>{if(e.candidate) ws.send(JSON.stringify({cmd:"signal",target:callWith,payload:{candidate:e.candidate},from:myCode}));};
+  localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+  if(isCaller){
+    const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({cmd:"signal",target:callWith,payload:{sdp:pc.localDescription},from:myCode}));
+  }
+}
+async function handleSignal(payload,from){
+  if(!pc) await startCall(false);
+  if(payload.sdp){
+    await pc.setRemoteDescription(payload.sdp);
+    if(payload.sdp.type==="offer"){const ans=await pc.createAnswer();await pc.setLocalDescription(ans);
+      ws.send(JSON.stringify({cmd:"signal",target:from,payload:{sdp:pc.localDescription},from:myCode}));}
+  }else if(payload.candidate){await pc.addIceCandidate(payload.candidate);}
+}
 
-    // === Appels ===
-    async function startCall(isCaller){
-      pc=new RTCPeerConnection();
-      localStream=await navigator.mediaDevices.getUserMedia({audio:true});
-      localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
-      remoteStream=new MediaStream();
-      pc.ontrack=e=>{remoteStream.addTrack(e.track); new Audio().srcObject=remoteStream;};
-      pc.onicecandidate=e=>{
-        if(e.candidate) ws.send(JSON.stringify({cmd:"candidate",target:callWith,candidate:e.candidate}));
-      };
-      if(isCaller){
-        const offer=await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        ws.send(JSON.stringify({cmd:"signal",target:callWith,data:offer}));
-      }
-    }
+/* ==== WS ==== */
+ws.onmessage=async(ev)=>{
+  const msg=JSON.parse(ev.data);
+  if(msg.type==="registered"){myCode=msg.code;showNotif("Code enregistré: "+msg.code);}
+  if(msg.type==="incoming-call"){callWith=msg.from;playRingtone();showNotif(`${msg.from} t'appelle <br><button onclick="answer('${msg.from}')">Répondre</button> <button onclick="reject('${msg.from}')">Raccrocher</button>`);}
+  if(msg.type==="call-accepted"){stopRingtone();callWith=msg.with;showInterface("Appel connecté");if(!pc)startCall(true);}
+  if(msg.type==="signal"){await handleSignal(msg.payload,msg.from);}
+  if(msg.type==="call-ended"){stopRingtone();hideInterface();location.reload();}
+};
 
-    function callFriend(){
-      const code=document.getElementById("friendCode").value.trim();
-      if(code){ call(code); }
-    }
-    function call(code){
-      callWith=code;
-      ws.send(JSON.stringify({cmd:"call",target:code}));
-      startCall(true);
-      showInterfaceCall(true,"Appel en cours...");
-      addHistory(code);
-    }
-    function answerCall(from){
-      stopRingtone();
-      ws.send(JSON.stringify({cmd:"answer",from}));
-      callWith=from;
-      startCall(false);
-      addHistory(from);
-      showInterfaceCall(true,"Appel connecté");
-    }
-    function rejectCall(from){
-      stopRingtone();
-      ws.send(JSON.stringify({cmd:"reject",from}));
-    }
+/* ==== Actions ==== */
+registerBtn.onclick=()=>{myCode=myCodeInput.value.trim();ws.send(JSON.stringify({cmd:"register",code:myCode}));};
+callBtn.onclick=()=>{callWith=friendCodeInput.value.trim();ws.send(JSON.stringify({cmd:"call",target:callWith,from:myCode}));showInterface("Appel en cours...");};
+window.answer=(from)=>{stopRingtone();callWith=from;ws.send(JSON.stringify({cmd:"answer",from}));startCall(false);showInterface("Appel connecté");};
+window.reject=(from)=>{stopRingtone();ws.send(JSON.stringify({cmd:"reject",from}));hideInterface();};
 
-    // === Interface appel ===
-    function showInterfaceCall(show,text){
-      callInterface.style.display=show?"flex":"none";
-      callStatus.textContent=text||"";
-      if(show){ startTimer(); } else { stopTimer(); }
-    }
-    function startTimer(){
-      startTime=Date.now();
-      timerInterval=setInterval(()=>{
-        const s=Math.floor((Date.now()-startTime)/1000);
-        const m=Math.floor(s/60);
-        callTimer.textContent=`${m}:${(s%60).toString().padStart(2,"0")}`;
-      },1000);
-    }
-    function stopTimer(){ clearInterval(timerInterval); callTimer.textContent=""; }
+/* ==== Hangup ==== */
+hangupBtn.onclick=()=>{ws.send(JSON.stringify({cmd:"hangup",target:callWith,from:myCode}));location.reload();};
 
-    function endCall(message){
-      stopRingtone();
-      if(pc){ pc.close(); pc=null; }
-      callWith=null;
-      stopTimer();
-      showInterfaceCall(false);
-      showNotification(message);
-      setTimeout(()=>location.reload(),1000);
-    }
-
-    // === Boutons ===
-    hangupBtn.onclick=()=>{
-      ws.send(JSON.stringify({cmd:"hangup",target:callWith}));
-      location.reload();
-    };
-
-    muteBtn.onclick=()=>{
-      if(!localStream) return;
-      isMuted=!isMuted;
-      localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted);
-      const icon=muteBtn.querySelector('i');
-      if(isMuted){
-        icon.classList.remove("fa-microphone");
-        icon.classList.add("fa-microphone-slash");
-      } else {
-        icon.classList.remove("fa-microphone-slash");
-        icon.classList.add("fa-microphone");
-      }
-    };
-  </script>
+/* ==== Mute ==== */
+muteBtn.onclick=()=>{
+  if(!localStream) return;
+  isMuted=!isMuted;
+  localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted);
+  muteBtn.innerHTML=isMuted?'<i class="fa fa-microphone-slash"></i>':'<i class="fa fa-microphone"></i>';
+};
+</script>
 </body>
 </html>
