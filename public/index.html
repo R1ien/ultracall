@@ -448,7 +448,11 @@ function endCallAndReload(reloadBoth=false) {
   callWith = null;
   hideInterface();
   stopRingtone();
-  if(reloadBoth) setTimeout(()=>{ location.reload(); }, 300);
+  if(reloadBoth) {
+    // flag pour dire que c'est un reload via raccrocher
+    sessionStorage.setItem('skipLoader', '1');
+    setTimeout(()=>{ location.reload(); }, 300);
+  }
 }
 
 /* ========= Loader + init App ========= */
@@ -462,7 +466,13 @@ function initApp() {
   const incomingCall = localStorage.getItem('incomingCall');
   if (incomingCall) playRingtone();
 
-  document.getElementById('loader').style.display='none';
+  // si reload depuis raccroché, on skip le loader
+  if (sessionStorage.getItem('skipLoader')) {
+    sessionStorage.removeItem('skipLoader');
+  } else {
+    document.getElementById('loader').style.display='none';
+  }
+
   document.querySelector('header').style.display='flex';
   document.querySelector('main').style.display='flex';
 }
@@ -473,3 +483,4 @@ window.addEventListener('load', ()=>{ setTimeout(initApp, 500); });
 
 </body>
 </html>
+
