@@ -179,8 +179,28 @@ function showNotification(html, timeout = 8000) {
   notificationsDiv.prepend(n);
   if (timeout > 0) setTimeout(() => { if (n.parentNode) n.parentNode.removeChild(n); }, timeout);
 }
-function playRingtone(){ ringtone.currentTime = 0; ringtone.play().catch(()=>{}); }
-function stopRingtone(){ try{ ringtone.pause(); ringtone.currentTime = 0; }catch(e){} }
+function playRingtone(){
+  try {
+    const pos = parseFloat(localStorage.getItem('ringtonePos') || '0');
+    ringtone.currentTime = pos > 0 ? pos : 0; // reprendre si dispo
+    ringtone.play().catch(()=>{});
+  } catch(e){}
+}
+
+// sauvegarder la position toutes les 500ms
+setInterval(() => {
+  if (!ringtone.paused) {
+    localStorage.setItem('ringtonePos', ringtone.currentTime.toString());
+  }
+}, 500);
+
+function stopRingtone(){
+  try {
+    ringtone.pause();
+    ringtone.currentTime = 0;
+    localStorage.removeItem('ringtonePos'); // reset complet
+  } catch(e){}
+}
 
 function saveMyCode(code){
   myCode = code;
@@ -456,10 +476,14 @@ window.addEventListener('load', () => {
         <button class="btn" onclick="answerCall('${pending}')"><i class="fa fa-phone"></i> Répondre</button>
         <button class="btn ghost" onclick="rejectCall('${pending}')">Raccrocher</button>
       </div>`, 0);
+  } else {
+    // si aucun appel, on nettoie la sonnerie
+    localStorage.removeItem('ringtonePos');
   }
 });
 </script>
 </body>
 </html>
+
 
 
