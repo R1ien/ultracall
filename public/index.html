@@ -136,7 +136,7 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
 
 <!-- audio elements -->
 <audio id="remoteAudio" autoplay></audio>
-<audio id="ringtone" src="sonnerie.mp3" loop></audio>
+<audio id="ringtone" src="sonnerie.mp3" preload="auto" loop></audio>
 
 <script>
 /* ========= Connexion WS robuste ========= */
@@ -278,7 +278,7 @@ ws.addEventListener('message', async (ev) => {
       showNotification(`<strong>${msg.from}</strong> t'appelle<br/>
         <div style="margin-top:8px">
           <button class="btn" onclick="answerCall('${msg.from}')"><i class="fa fa-phone"></i> Répondre</button>
-          <button class="btn ghost" onclick="rejectCall('${msg.from}')">Raccrocher</button>
+          <button class="btn ghost" onclick="rejectCallAndReload('${msg.from}')">Raccrocher</button>
         </div>`, 0);
       break;
 
@@ -303,7 +303,7 @@ ws.addEventListener('message', async (ev) => {
     case 'call-ended':
       stopRingtone();
       showNotification(msg.from ? `${msg.from} a raccroché` : 'Appel terminé', 4000);
-      endCallAndReload();
+      endCallAndReload(true); // reload pour les deux côtés
       break;
 
     case 'error':
@@ -349,11 +349,12 @@ async function answerCall(from) {
   addHistory(from);
 }
 
-function rejectCall(from) {
+function rejectCallAndReload(from) {
   stopRingtone();
   wsSend({ cmd: 'reject', from });
   hideInterface();
   localStorage.removeItem('incomingCall');
+  setTimeout(()=>{ location.reload(); }, 300);
 }
 
 /* ========= WebRTC ========= */
@@ -428,8 +429,8 @@ function stopTimer(){ if(callTimer) { clearInterval(callTimer); callTimer=null; 
 
 /* ========= Hangup / Mute ========= */
 hangupBtn.addEventListener('click', () => {
-  wsSend({ cmd: 'hangup', target: callWith });
-  endCallAndReload();
+  if (callWith) wsSend({ cmd: 'hangup', target: callWith });
+  endCallAndReload(true);
 });
 muteBtn.addEventListener('click', () => {
   isMuted = !isMuted;
@@ -441,11 +442,13 @@ muteBtn.addEventListener('click', () => {
 remoteGain.addEventListener('input', ()=>{ remoteAudio.volume = remoteGain.value/100; remoteVal.textContent=remoteGain.value+'%'; });
 localGain.addEventListener('input', ()=>{ if(localStream && applyLocalGain.checked){ const val = localGain.value/100; localStream.getAudioTracks().forEach(t=>t.applyConstraints({volume: val}).catch(()=>{})); } localVal.textContent=localGain.value+'%'; });
 
-function endCallAndReload() {
+function endCallAndReload(reloadBoth=false) {
   stopTimer();
   if (pc) { pc.close(); pc=null; }
   callWith = null;
   hideInterface();
+  stopRingtone();
+  if(reloadBoth) setTimeout(()=>{ location.reload(); }, 300);
 }
 
 /* ========= Loader + init App ========= */
