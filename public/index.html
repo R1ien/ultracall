@@ -136,6 +136,33 @@ ws.addEventListener('close', ()=> {
   setTimeout(()=>{ ws = new WebSocket(WS_URL); ws.addEventListener('open', ()=>{ while(sendQueue.length) ws.send(sendQueue.shift()); }); }, 1200);
 });
 
+  /* ===== Patch sonnerie autoplay ===== */
+let ringtone = document.getElementById('ringtone');
+let ringtoneUnlocked = false;
+
+function unlockRingtone() {
+  if (!ringtoneUnlocked) {
+    ringtone.play().then(() => {
+      ringtone.pause(); // on stoppe tout de suite
+      ringtoneUnlocked = true;
+      console.log("Sonnerie débloquée !");
+    }).catch(err => console.log("Autoplay bloqué:", err));
+  }
+}
+document.addEventListener("click", unlockRingtone, { once: true });
+
+function playRingtone() {
+  if (ringtoneUnlocked) {
+    ringtone.currentTime = 0;
+    ringtone.play().catch(err => console.log("Impossible de jouer la sonnerie:", err));
+  }
+}
+
+function stopRingtone() {
+  ringtone.pause();
+  ringtone.currentTime = 0;
+}
+
 /* ========= State & UI refs ========= */
 let myCode = '';
 let callWith = null;
@@ -471,5 +498,6 @@ window.addEventListener('load', () => {
 </script>
 </body>
 </html>
+
 
 
