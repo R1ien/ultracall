@@ -114,7 +114,7 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
 
 <!-- audio elements -->
 <audio id="remoteAudio" autoplay></audio>
-<audio id="ringtone" src="sonnerie.mp3" loop preload="auto"></audio>
+<audio id="ringtone" src="sonnerie.mp3" loop></audio>
 
 <script>
 /* ========= Connexion WS robuste ========= */
@@ -130,7 +130,7 @@ function wsSend(obj) {
 ws.addEventListener('open', () => {
   while (sendQueue.length) ws.send(sendQueue.shift());
   const saved = localStorage.getItem('myCode');
-  if (saved) { myCode = saved; wsSend({ cmd: 'register', code: saved }); }
+  if (saved) { myCode = saved; wsSend({ cmd: 'register', code: myCode }); }
 });
 ws.addEventListener('close', ()=> {
   setTimeout(()=>{ ws = new WebSocket(WS_URL); ws.addEventListener('open', ()=>{ while(sendQueue.length) ws.send(sendQueue.shift()); }); }, 1200);
@@ -179,22 +179,7 @@ function showNotification(html, timeout = 8000) {
   notificationsDiv.prepend(n);
   if (timeout > 0) setTimeout(() => { if (n.parentNode) n.parentNode.removeChild(n); }, timeout);
 }
-
-/* --- PATCH RINGTONE --- */
-let ringtoneUnlocked = false;
-function unlockRingtone() {
-  if (!ringtoneUnlocked) {
-    ringtone.play().then(() => {
-      ringtone.pause();
-      ringtone.currentTime = 0;
-      ringtoneUnlocked = true;
-    }).catch(()=>{});
-  }
-}
-document.addEventListener('click', unlockRingtone);
-document.addEventListener('keydown', unlockRingtone);
-
-function playRingtone(){ if(ringtoneUnlocked){ ringtone.currentTime=0; ringtone.play().catch(()=>{});} }
+function playRingtone(){ ringtone.currentTime = 0; ringtone.play().catch(()=>{}); }
 function stopRingtone(){ try{ ringtone.pause(); ringtone.currentTime = 0; }catch(e){} }
 
 function saveMyCode(code){
@@ -390,73 +375,71 @@ muteBtn.addEventListener('click', () => {
   if (!track) return;
   track.enabled = !track.enabled;
   isMuted = !track.enabled;
-  muteBtn.innerHTML = isMuted ? '<i class="fa fa-microphone-slash"></i>' : '<i class="fa fa-microphone"></i>';
+  muteBtn.innerHTML = track.enabled ? '<i class="fa fa-microphone"></i>' : '<i class="fa fa-microphone-slash"></i>';
 });
 
 function endCallAndReload() {
-  hideInterface();
-  if (pc) { pc.close(); pc = null; }
-  if (callTimer) { clearInterval(callTimer); callTimer = null; }
-  location.reload();
+  cleanupPeer();
+  setTimeout(() => location.reload(), 900);
 }
 
-function showInterface(show, status) {
+/* ========= UI: Interface central + timer ========= */
+function showInterface(show, status = 'Appel en cours...') {
   interfaceCall.style.display = show ? 'block' : 'none';
-  callStatus.textContent = status || '';
-  seconds = 0;
-  timerEl.textContent = '00:00';
+  callStatus.textContent = status;
+  if (!show) stopTimer();
 }
-function hideInterface() {
-  interfaceCall.style.display = 'none';
-  seconds = 0;
-  timerEl.textContent = '00:00';
-}
+function hideInterface() { showInterface(false); }
+
 function startTimer() {
+  seconds = 0; timerEl.textContent = '00:00';
   if (callTimer) clearInterval(callTimer);
   callTimer = setInterval(() => {
     seconds++;
-    const m = String(Math.floor(seconds / 60)).padStart(2,'0');
-    const s = String(seconds % 60).padStart(2,'0');
-    timerEl.textContent = m + ':' + s;
+    const m = String(Math.floor(seconds/60)).padStart(2,'0');
+    const s = String(seconds%60).padStart(2,'0');
+    timerEl.textContent = `${m}:${s}`;
   }, 1000);
 }
+function stopTimer() { if (callTimer) clearInterval(callTimer); timerEl.textContent = '00:00'; }
 
-/* ========= Sliders gain ========= */
+/* ========= Cleanup ========= */
+function cleanupPeer(){
+  try { if (pc) pc.close(); } catch(e){}
+  pc = null;
+  try {
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+  } catch(e){}
+  stopTimer();
+}
+
+/* ========= sliders & UI bindings ========= */
 remoteGain.addEventListener('input', () => {
-  const v = parseInt(remoteGain.value);
-  remoteVal.textContent = v + '%';
-  remoteAudio.volume = v / 100;
+  remoteVal.textContent = remoteGain.value + '%';
+  if (remoteAudio) remoteAudio.volume = Number(remoteGain.value) / 100;
 });
-localGain.addEventListener('input', () => {
-  const v = parseInt(localGain.value);
-  localVal.textContent = v + '%';
-  if (localStream && applyLocalGain.checked) {
-    const track = localStream.getAudioTracks()[0];
-    track.applyConstraints({ volume: v / 100 }).catch(()=>{});
+localGain.addEventListener('input', () => { localVal.textContent = localGain.value + '%'; });
+
+/* ========= unlock ringtone autoplay ========= */
+function unlockAudio() {
+  ringtone.play().then(()=>{ ringtone.pause(); ringtone.currentTime=0; }).catch(()=>{});
+  document.removeEventListener('click', unlockAudio);
+}
+document.addEventListener('click', unlockAudio);
+
+/* ========= misc init ========= */
+window.addEventListener('load', () => {
+  renderHistory();
+  const saved = localStorage.getItem('myCode');
+  if (saved) {
+    myCode = saved;
+    myCodeInput.value = saved;
+    if (ws.readyState === WebSocket.OPEN) wsSend({ cmd: 'register', code: saved });
   }
 });
-
-/* ========= Draggable interface ========= */
-let dragStartX=0, dragStartY=0, dragOffX=0, dragOffY=0, dragging=false;
-interfaceCall.addEventListener('mousedown', (e)=> {
-  dragging=true;
-  dragStartX=e.clientX; dragStartY=e.clientY;
-  const rect=interfaceCall.getBoundingClientRect();
-  dragOffX=rect.left; dragOffY=rect.top;
-});
-window.addEventListener('mousemove', (e)=> {
-  if(!dragging) return;
-  const dx=e.clientX-dragStartX; const dy=e.clientY-dragStartY;
-  interfaceCall.style.left=(dragOffX+dx+interfaceCall.offsetWidth/2)+"px";
-  interfaceCall.style.top=(dragOffY+dy+interfaceCall.offsetHeight/2)+"px";
-  interfaceCall.style.transform="translate(-50%,-50%)";
-});
-window.addEventListener('mouseup',()=>{dragging=false;});
-
-/* ========= init ========= */
-renderHistory();
-const saved = localStorage.getItem('myCode');
-if (saved) { myCode = saved; myCodeInput.value = saved; }
 </script>
 </body>
 </html>
