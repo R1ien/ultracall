@@ -123,7 +123,7 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
 </main>
 
 <!-- interface centrale d'appel -->
-<div id="interfaceCall">
+<div id="interfaceCall" style="display:none">
   <div id="callStatus">Appel en cours...</div>
   <div id="timer">00:00</div>
   <div class="controls">
@@ -139,7 +139,26 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
 <audio id="ringtone" src="sonnerie.mp3" loop></audio>
 
 <script>
-/* ========= variables ========= */
+/* ========= Connexion WS robuste ========= */
+const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+let ws = new WebSocket(WS_URL);
+let sendQueue = [];
+function wsSend(obj) {
+  if (obj.cmd !== 'register' && obj.from === undefined && myCode) obj.from = myCode;
+  const str = JSON.stringify(obj);
+  if (ws.readyState === WebSocket.OPEN) ws.send(str);
+  else sendQueue.push(str);
+}
+ws.addEventListener('open', () => {
+  while (sendQueue.length) ws.send(sendQueue.shift());
+  const saved = localStorage.getItem('myCode');
+  if (saved) { myCode = saved; wsSend({ cmd: 'register', code: myCode }); }
+});
+ws.addEventListener('close', ()=> {
+  setTimeout(()=>{ ws = new WebSocket(WS_URL); ws.addEventListener('open', ()=>{ while(sendQueue.length) ws.send(sendQueue.shift()); }); }, 1200);
+});
+
+/* ========= State & UI refs ========= */
 let myCode = '';
 let callWith = null;
 let pc = null;
@@ -153,178 +172,301 @@ const registerBtn = document.getElementById('registerBtn');
 const friendCodeInput = document.getElementById('friendCode');
 const callBtn = document.getElementById('callBtn');
 const callFromHistoryBtn = document.getElementById('callFromHistoryBtn');
+
 const historyDiv = document.getElementById('history');
 const notificationsDiv = document.getElementById('notifications');
+
 const remoteAudio = document.getElementById('remoteAudio');
 const ringtone = document.getElementById('ringtone');
+
 const interfaceCall = document.getElementById('interfaceCall');
 const callStatus = document.getElementById('callStatus');
 const timerEl = document.getElementById('timer');
 const hangupBtn = document.getElementById('hangupBtn');
 const muteBtn = document.getElementById('muteBtn');
+
 const remoteGain = document.getElementById('remoteGain');
 const remoteVal = document.getElementById('remoteVal');
+const applyLocalGain = document.getElementById('applyLocalGain');
 const localGain = document.getElementById('localGain');
 const localVal = document.getElementById('localVal');
 
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
-/* ========= WS ========= */
-const WS_URL = (location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
-let ws = new WebSocket(WS_URL);
-let sendQueue = [];
-function wsSend(obj){
-  if(obj.cmd!=='register' && obj.from===undefined && myCode) obj.from=myCode;
-  const str = JSON.stringify(obj);
-  if(ws.readyState===WebSocket.OPEN) ws.send(str); else sendQueue.push(str);
-}
-ws.addEventListener('open',()=>{
-  while(sendQueue.length) ws.send(sendQueue.shift());
-  const saved = localStorage.getItem('myCode');
-  if(saved){ myCode = saved; wsSend({cmd:'register',code:saved}); }
-});
-ws.addEventListener('close',()=>setTimeout(()=>{ ws = new WebSocket(WS_URL); ws.addEventListener('open',()=>{ while(sendQueue.length) ws.send(sendQueue.shift()); }); },1200));
-
-/* ========= notifications ========= */
-function showNotification(html, timeout=8000){
-  const n = document.createElement('div'); n.className='notification'; n.innerHTML=html;
+/* ========= helpers ========= */
+function showNotification(html, timeout = 8000) {
+  const n = document.createElement('div');
+  n.className = 'notification';
+  n.innerHTML = html;
   notificationsDiv.prepend(n);
-  if(timeout>0) setTimeout(()=>{ if(n.parentNode) n.parentNode.removeChild(n); },timeout);
+  if (timeout > 0) setTimeout(() => { if (n.parentNode) n.parentNode.removeChild(n); }, timeout);
 }
 
-/* ========= Sonnerie persistante ========= */
+/* ========= Ringtone persistant ========= */
 function playRingtone(){
-  try{
-    const pos = parseFloat(localStorage.getItem('ringtonePos')||'0');
-    ringtone.currentTime = pos>0?pos:0;
+  try {
+    const pos = parseFloat(localStorage.getItem('ringtonePos') || '0');
+    ringtone.currentTime = pos > 0 ? pos : 0;
     ringtone.play().catch(()=>{});
   } catch(e){}
 }
 function stopRingtone(){
-  try{
+  try {
     ringtone.pause();
-    ringtone.currentTime=0;
+    ringtone.currentTime = 0;
     localStorage.removeItem('ringtonePos');
     localStorage.removeItem('incomingCall');
   } catch(e){}
 }
-setInterval(()=>{ if(!ringtone.paused) localStorage.setItem('ringtonePos', ringtone.currentTime.toString()); },500);
+// sauvegarder position toutes les 500ms
+setInterval(() => {
+  if (!ringtone.paused) localStorage.setItem('ringtonePos', ringtone.currentTime.toString());
+}, 500);
 
-/* ========= Historique ========= */
+/* ========= save code ========= */
+function saveMyCode(code){
+  myCode = code;
+  localStorage.setItem('myCode', code);
+  myCodeInput.value = code;
+}
+
+/* ========= history ========= */
 function addHistory(code){
-  let arr = JSON.parse(localStorage.getItem('callHistory')||'[]');
-  if(!arr.includes(code)) arr.unshift(code);
+  let arr = JSON.parse(localStorage.getItem('callHistory') || '[]');
+  if (!arr.includes(code)) arr.unshift(code);
   arr = arr.slice(0,20);
-  localStorage.setItem('callHistory',JSON.stringify(arr));
+  localStorage.setItem('callHistory', JSON.stringify(arr));
   renderHistory();
 }
 function renderHistory(){
-  historyDiv.innerHTML='';
-  const arr = JSON.parse(localStorage.getItem('callHistory')||'[]');
-  if(arr.length===0){ historyDiv.innerHTML='<div class="small">Aucun appel enregistré</div>'; callFromHistoryBtn.style.display='none'; return; }
-  callFromHistoryBtn.style.display='inline-flex';
-  for(const code of arr){
+  historyDiv.innerHTML = '';
+  const arr = JSON.parse(localStorage.getItem('callHistory') || '[]');
+  if (arr.length === 0) {
+    historyDiv.innerHTML = '<div class="small">Aucun appel enregistré</div>';
+    callFromHistoryBtn.style.display = 'none';
+    return;
+  }
+  callFromHistoryBtn.style.display = 'inline-flex';
+  for (const code of arr) {
     const btn = document.createElement('button');
-    btn.className='btn ghost'; btn.style.justifyContent='space-between';
-    btn.innerHTML=`<span><i class="fa fa-phone"></i> ${code}</span><span class="small">Rappeler</span>`;
-    btn.onclick=()=>{ friendCodeInput.value=code; callFriend(code); };
+    btn.className = 'btn ghost';
+    btn.style.justifyContent = 'space-between';
+    btn.innerHTML = `<span><i class="fa fa-phone"></i> ${code}</span><span class="small">Rappeler</span>`;
+    btn.onclick = () => { friendCodeInput.value = code; callFriend(code); };
     historyDiv.appendChild(btn);
   }
 }
 
-/* ========= WS messages ========= */
-ws.addEventListener('message',async(ev)=>{
+/* ========= WS message handling ========= */
+ws.addEventListener('message', async (ev) => {
   let msg;
-  try{ msg=JSON.parse(ev.data); }catch(e){return;}
-  switch(msg.type){
-    case 'registered': myCode=msg.code; localStorage.setItem('myCode',msg.code); showNotification(`Code enregistré : <strong>${msg.code}</strong>`,4000); break;
-    case 'call-placed': showNotification(`Appel lancé vers ${msg.target}`,3000); break;
-    case 'incoming-call':
-      localStorage.setItem('incomingCall',msg.from);
-      playRingtone();
-      showNotification(`<strong>${msg.from}</strong> t'appelle<br/><div style="margin-top:8px"><button class="btn" onclick="answerCall('${msg.from}')"><i class="fa fa-phone"></i> Répondre</button><button class="btn ghost" onclick="rejectCall('${msg.from}')">Raccrocher</button></div>`,0);
+  try { msg = JSON.parse(ev.data); } catch (e) { return; }
+
+  switch (msg.type) {
+    case 'registered':
+      saveMyCode(msg.code);
+      showNotification(`Code enregistré : <strong>${msg.code}</strong>`, 4000);
       break;
-    case 'call-accepted': stopRingtone(); callWith=msg.with; showInterface(true,'Appel connecté'); if(!pc) startCall(true).catch(e=>console.error(e)); addHistory(callWith); break;
-    case 'call-rejected': stopRingtone(); showNotification(`Ton appel a été refusé par ${msg.from}`,4000); hideInterface(); break;
-    case 'signal': await handleSignal(msg.payload,msg.from).catch(e=>console.error(e)); break;
-    case 'call-ended': stopRingtone(); showNotification(msg.from?`${msg.from} a raccroché`:'Appel terminé',4000); endCallAndReload(); break;
-    case 'error': showNotification(`Erreur: ${msg.message}`,4000); break;
+
+    case 'call-placed':
+      showNotification(`Appel lancé vers ${msg.target}`, 3000);
+      break;
+
+    case 'incoming-call':
+      localStorage.setItem('incomingCall', msg.from); // mémoriser appel entrant
+      playRingtone();
+      showNotification(`<strong>${msg.from}</strong> t'appelle<br/>
+        <div style="margin-top:8px">
+          <button class="btn" onclick="answerCall('${msg.from}')"><i class="fa fa-phone"></i> Répondre</button>
+          <button class="btn ghost" onclick="rejectCall('${msg.from}')">Raccrocher</button>
+        </div>`, 0);
+      break;
+
+    case 'call-accepted':
+      stopRingtone();
+      callWith = msg.with;
+      showInterface(true, 'Appel connecté');
+      if (!pc) startCall(true).catch(e => console.error(e));
+      addHistory(callWith);
+      break;
+
+    case 'call-rejected':
+      stopRingtone();
+      showNotification(`Ton appel a été refusé par ${msg.from}`, 4000);
+      hideInterface();
+      break;
+
+    case 'signal':
+      await handleSignal(msg.payload, msg.from).catch(e => console.error(e));
+      break;
+
+    case 'call-ended':
+      stopRingtone();
+      showNotification(msg.from ? `${msg.from} a raccroché` : 'Appel terminé', 4000);
+      endCallAndReload();
+      break;
+
+    case 'error':
+      showNotification(`Erreur: ${msg.message}`, 4000);
+      break;
   }
 });
 
 /* ========= UI actions ========= */
-registerBtn.addEventListener('click',()=>{
-  const code=String(myCodeInput.value||'').trim(); if(!code) return alert('Tape ton code d\'ami');
-  myCode=code; localStorage.setItem('myCode',code); myCodeInput.value=code; wsSend({cmd:'register',code});
+registerBtn.addEventListener('click', () => {
+  const code = String(myCodeInput.value || '').trim();
+  if (!code) return alert('Tape ton code d\'ami');
+  saveMyCode(code);
+  wsSend({ cmd: 'register', code });
 });
-callBtn.addEventListener('click',()=>{
-  const target=String(friendCodeInput.value||'').trim(); if(!target) return alert('Tape le code ami'); if(!myCode){ alert('Enregistre ton code d\'abord.'); return; } callFriend(target);
+
+callBtn.addEventListener('click', () => {
+  const target = String(friendCodeInput.value || '').trim();
+  if (!target) return alert('Tape le code ami');
+  if (!myCode) { alert('Enregistre ton code d\'abord.'); return; }
+  callFriend(target);
 });
-callFromHistoryBtn.addEventListener('click',()=>{ const arr=JSON.parse(localStorage.getItem('callHistory')||'[]'); if(arr.length){ const last=arr[0]; friendCodeInput.value=last; callFriend(last); } });
+callFromHistoryBtn.addEventListener('click', () => {
+  const arr = JSON.parse(localStorage.getItem('callHistory') || '[]');
+  if (arr.length) { const last = arr[0]; friendCodeInput.value = last; callFriend(last); }
+});
 
-function callFriend(target){ callWith=target; showInterface(true,'Appel en cours...'); wsSend({cmd:'call',target}); addHistory(target); }
+function callFriend(target) {
+  callWith = target;
+  showInterface(true, 'Appel en cours...');
+  wsSend({ cmd: 'call', target });
+  addHistory(target);
+}
 
-async function answerCall(from){ stopRingtone(); localStorage.removeItem('incomingCall'); callWith=from; wsSend({cmd:'answer',from}); await startCall(false); showInterface(true,'Appel connecté'); addHistory(from); }
-function rejectCall(from){ stopRingtone(); wsSend({cmd:'reject',from}); hideInterface(); localStorage.removeItem('incomingCall'); }
+/* ========= Answer / Reject ========= */
+async function answerCall(from) {
+  stopRingtone();
+  localStorage.removeItem('incomingCall');
+  callWith = from;
+  wsSend({ cmd: 'answer', from: from });
+  await startCall(false);
+  showInterface(true, 'Appel connecté');
+  addHistory(from);
+}
+
+function rejectCall(from) {
+  stopRingtone();
+  wsSend({ cmd: 'reject', from });
+  hideInterface();
+  localStorage.removeItem('incomingCall');
+}
 
 /* ========= WebRTC ========= */
-async function prepareLocalAudio(){ if(localStream) return localStream; try{ localStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}); return localStream; }catch(e){ alert('Erreur accès micro: '+(e.message||e)); throw e; } }
+async function prepareLocalAudio() {
+  if (localStream) return localStream;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+    return localStream;
+  } catch (e) {
+    alert('Erreur accès micro: ' + (e.message || e));
+    throw e;
+  }
+}
 
-async function startCall(isCaller){
+async function startCall(isCaller) {
   await prepareLocalAudio();
-  pc=new RTCPeerConnection({iceServers:ICE_SERVERS});
-  pc.ontrack=(e)=>{ remoteAudio.srcObject=e.streams[0]; startTimer(); };
-  pc.onicecandidate=(e)=>{ if(e.candidate&&callWith) wsSend({cmd:'signal',target:callWith,payload:{candidate:e.candidate}}); };
-  localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));
-  if(isCaller){ const offer=await pc.createOffer(); await pc.setLocalDescription(offer); wsSend({cmd:'signal',target:callWith,payload:{sdp:pc.localDescription}}); }
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+  pc.ontrack = (e) => {
+    remoteAudio.srcObject = e.streams[0];
+    startTimer();
+  };
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate && callWith) wsSend({ cmd: 'signal', target: callWith, payload: { candidate: e.candidate } });
+  };
+
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+  if (isCaller) {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    wsSend({ cmd: 'signal', target: callWith, payload: { sdp: pc.localDescription } });
+  }
 }
 
-async function handleSignal(payload,from){
-  if(!payload) return;
-  if(!pc) await startCall(false);
-  if(payload.sdp){ await pc.setRemoteDescription(payload.sdp); if(payload.sdp.type==='offer'){ const answer=await pc.createAnswer(); await pc.setLocalDescription(answer); wsSend({cmd:'signal',target:from||callWith,payload:{sdp:pc.localDescription}}); } }
-  else if(payload.candidate){ try{ await pc.addIceCandidate(payload.candidate); }catch(e){console.warn('ICE add error',e);} }
+async function handleSignal(payload, from) {
+  if (!pc) await startCall(false);
+  if (payload.sdp) {
+    await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+    if (payload.sdp.type === 'offer') {
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      wsSend({ cmd: 'signal', target: from, payload: { sdp: pc.localDescription } });
+    }
+  } else if (payload.candidate) {
+    try { await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)); } catch(e){}
+  }
 }
 
-/* ========= Hangup / end ========= */
-hangupBtn.addEventListener('click',()=>{ stopRingtone(); if(callWith) wsSend({cmd:'hangup',target:callWith}); location.reload(); });
-muteBtn.addEventListener('click',()=>{ if(!localStream) return; const track=localStream.getAudioTracks()[0]; if(!track) return; track.enabled=!track.enabled; isMuted=!track.enabled; muteBtn.innerHTML=track.enabled?'<i class="fa fa-microphone"></i>':'<i class="fa fa-microphone-slash"></i>'; });
-
-function endCallAndReload(){ cleanupPeer(); setTimeout(()=>location.reload(),900); }
-function cleanupPeer(){ try{ if(pc) pc.close(); }catch(e){} pc=null; try{ if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; } }catch(e){} stopTimer(); }
+/* ========= Call Interface ========= */
+function showInterface(show, status) {
+  interfaceCall.style.display = show ? 'block' : 'none';
+  callStatus.textContent = status || '';
+  if (!show) stopTimer();
+}
+function hideInterface(){ showInterface(false); }
 
 /* ========= Timer ========= */
-function showInterface(show,status='Appel en cours...'){ interfaceCall.style.display=show?'block':'none'; callStatus.textContent=status; if(!show) stopTimer(); }
-function hideInterface(){ showInterface(false); }
-function startTimer(){ seconds=0; timerEl.textContent='00:00'; if(callTimer) clearInterval(callTimer); callTimer=setInterval(()=>{ seconds++; const m=String(Math.floor(seconds/60)).padStart(2,'0'); const s=String(seconds%60).padStart(2,'0'); timerEl.textContent=`${m}:${s}`; },1000); }
-function stopTimer(){ if(callTimer) clearInterval(callTimer); timerEl.textContent='00:00'; }
+function startTimer() {
+  seconds = 0;
+  timerEl.textContent = '00:00';
+  if (callTimer) clearInterval(callTimer);
+  callTimer = setInterval(() => {
+    seconds++;
+    const m = String(Math.floor(seconds / 60)).padStart(2,'0');
+    const s = String(seconds % 60).padStart(2,'0');
+    timerEl.textContent = `${m}:${s}`;
+  }, 1000);
+}
+function stopTimer(){ if(callTimer) { clearInterval(callTimer); callTimer=null; } }
 
-/* ========= sliders ========= */
-remoteGain.addEventListener('input',()=>{ remoteVal.textContent=remoteGain.value+'%'; if(remoteAudio) remoteAudio.volume=Number(remoteGain.value)/100; });
-localGain.addEventListener('input',()=>{ localVal.textContent=localGain.value+'%'; });
+/* ========= Hangup / Mute ========= */
+hangupBtn.addEventListener('click', () => {
+  wsSend({ cmd: 'hangup', target: callWith });
+  endCallAndReload();
+});
+muteBtn.addEventListener('click', () => {
+  isMuted = !isMuted;
+  if (localStream) localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted);
+  muteBtn.innerHTML = isMuted ? '<i class="fa fa-microphone-slash"></i>' : '<i class="fa fa-microphone"></i>';
+});
 
-/* ========= unlock audio ========= */
-function unlockAudio(){ ringtone.play().then(()=>{ ringtone.pause(); ringtone.currentTime=0; }).catch(()=>{}); document.removeEventListener('click',unlockAudio); }
-document.addEventListener('click',unlockAudio);
+/* ========= Audio sliders ========= */
+remoteGain.addEventListener('input', ()=>{ remoteAudio.volume = remoteGain.value/100; remoteVal.textContent=remoteGain.value+'%'; });
+localGain.addEventListener('input', ()=>{ if(localStream && applyLocalGain.checked){ const val = localGain.value/100; localStream.getAudioTracks().forEach(t=>t.applyConstraints({volume: val}).catch(()=>{})); } localVal.textContent=localGain.value+'%'; });
 
-/* ========= init ========= */
-window.addEventListener('load',()=>{
+function endCallAndReload() {
+  stopTimer();
+  if (pc) { pc.close(); pc=null; }
+  callWith = null;
+  hideInterface();
+}
+
+/* ========= Loader + init App ========= */
+function initApp() {
+  const savedCode = localStorage.getItem('myCode');
+  if(savedCode) myCodeInput.value = savedCode;
+
   renderHistory();
-  const saved=localStorage.getItem('myCode');
-  if(saved){ myCode=saved; myCodeInput.value=saved; if(ws.readyState===WebSocket.OPEN) wsSend({cmd:'register',code:saved}); }
 
-  // Vérifier si un appel était en attente
-  const pending=localStorage.getItem('incomingCall');
-  if(pending){
-    playRingtone();
-    showNotification(`<strong>${pending}</strong> t'appelle<br/><div style="margin-top:8px"><button class="btn" onclick="answerCall('${pending}')"><i class="fa fa-phone"></i> Répondre</button><button class="btn ghost" onclick="rejectCall('${pending}')">Raccrocher</button></div>`,0);
-  } else { localStorage.removeItem('ringtonePos'); }
+  // appel entrant persisté
+  const incomingCall = localStorage.getItem('incomingCall');
+  if (incomingCall) playRingtone();
 
-  // cacher loader et montrer UI
   document.getElementById('loader').style.display='none';
   document.querySelector('header').style.display='flex';
   document.querySelector('main').style.display='flex';
-});
+}
+
+// petit délai pour voir loader
+window.addEventListener('load', ()=>{ setTimeout(initApp, 500); });
 </script>
+
 </body>
 </html>
