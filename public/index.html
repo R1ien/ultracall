@@ -230,14 +230,15 @@ ws.addEventListener('message', async (ev) => {
       showNotification(`Appel lancé vers ${msg.target}`, 3000);
       break;
 
-    case 'incoming-call':
-      playRingtone();
-      showNotification(`<strong>${msg.from}</strong> t'appelle<br/>
-        <div style="margin-top:8px">
-          <button class="btn" onclick="answerCall('${msg.from}')"><i class="fa fa-phone"></i> Répondre</button>
-          <button class="btn ghost" onclick="rejectCall('${msg.from}')">Raccrocher</button>
-        </div>`, 0);
-      break;
+   case 'incoming-call':
+  playRingtone();
+  localStorage.setItem('incomingCall', msg.from); // sauvegarde l'appel en attente
+  showNotification(`<strong>${msg.from}</strong> t'appelle<br/>
+    <div style="margin-top:8px">
+      <button class="btn" onclick="answerCall('${msg.from}')"><i class="fa fa-phone"></i> Répondre</button>
+      <button class="btn ghost" onclick="rejectCall('${msg.from}')">Raccrocher</button>
+    </div>`, 0);
+  break;
 
     case 'call-accepted':
       stopRingtone();
@@ -299,6 +300,7 @@ function callFriend(target) {
 /* ========= Answer / Reject ========= */
 async function answerCall(from) {
   stopRingtone();
+  localStorage.removeItem('incomingCall'); // appel accepté → plus d'appel en attente
   callWith = from;
   wsSend({ cmd: 'answer', from: from });
   await startCall(false);
@@ -308,9 +310,9 @@ async function answerCall(from) {
 
 function rejectCall(from) {
   stopRingtone();
+  localStorage.removeItem('incomingCall'); // appel rejeté → flag supprimé
   wsSend({ cmd: 'reject', from });
   hideInterface();
-  // recharge aussi celui qui raccroche
   location.reload();
 }
 
@@ -367,9 +369,11 @@ async function handleSignal(payload, from) {
 /* ========= Hangup / end ========= */
 hangupBtn.addEventListener('click', () => {
   stopRingtone();
+  localStorage.removeItem('incomingCall'); // appel terminé → nettoyage
   if (callWith) wsSend({ cmd: 'hangup', target: callWith });
   location.reload();
 });
+
 
 // Mute button fonctionnel
 muteBtn.addEventListener('click', () => {
@@ -442,8 +446,20 @@ window.addEventListener('load', () => {
     myCodeInput.value = saved;
     if (ws.readyState === WebSocket.OPEN) wsSend({ cmd: 'register', code: saved });
   }
+
+  // Vérifier si un appel était en attente
+  const pending = localStorage.getItem('incomingCall');
+  if (pending) {
+    playRingtone();
+    showNotification(`<strong>${pending}</strong> t'appelle<br/>
+      <div style="margin-top:8px">
+        <button class="btn" onclick="answerCall('${pending}')"><i class="fa fa-phone"></i> Répondre</button>
+        <button class="btn ghost" onclick="rejectCall('${pending}')">Raccrocher</button>
+      </div>`, 0);
+  }
 });
 </script>
 </body>
 </html>
+
 
