@@ -64,7 +64,7 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
 <main class="container">
   <section class="col card">
     <h3>Ton code d'ami</h3>
-    <input id="myCode" type="text" placeholder="Ex: ABC123" />
+    <input id="myCode" type="text" placeholder="Ex: KIAN123" />
     <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
       <button id="registerBtn" class="btn"><i class="fa fa-user-plus"></i> Enregistrer</button>
       <div class="small">Ton code est sauvegardé localement</div>
@@ -114,7 +114,7 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
 
 <!-- audio elements -->
 <audio id="remoteAudio" autoplay></audio>
-<audio id="ringtone" src="sonnerie.mp3" loop></audio>
+<audio id="ringtone" src="sonnerie.mp3" loop preload="auto"></audio>
 
 <script>
 /* ========= Connexion WS robuste ========= */
@@ -135,33 +135,6 @@ ws.addEventListener('open', () => {
 ws.addEventListener('close', ()=> {
   setTimeout(()=>{ ws = new WebSocket(WS_URL); ws.addEventListener('open', ()=>{ while(sendQueue.length) ws.send(sendQueue.shift()); }); }, 1200);
 });
-
-  /* ===== Patch sonnerie autoplay ===== */
-let ringtone = document.getElementById('ringtone');
-let ringtoneUnlocked = false;
-
-function unlockRingtone() {
-  if (!ringtoneUnlocked) {
-    ringtone.play().then(() => {
-      ringtone.pause(); // on stoppe tout de suite
-      ringtoneUnlocked = true;
-      console.log("Sonnerie débloquée !");
-    }).catch(err => console.log("Autoplay bloqué:", err));
-  }
-}
-document.addEventListener("click", unlockRingtone, { once: true });
-
-function playRingtone() {
-  if (ringtoneUnlocked) {
-    ringtone.currentTime = 0;
-    ringtone.play().catch(err => console.log("Impossible de jouer la sonnerie:", err));
-  }
-}
-
-function stopRingtone() {
-  ringtone.pause();
-  ringtone.currentTime = 0;
-}
 
 /* ========= State & UI refs ========= */
 let myCode = '';
@@ -206,7 +179,22 @@ function showNotification(html, timeout = 8000) {
   notificationsDiv.prepend(n);
   if (timeout > 0) setTimeout(() => { if (n.parentNode) n.parentNode.removeChild(n); }, timeout);
 }
-function playRingtone(){ ringtone.currentTime = 0; ringtone.play().catch(()=>{}); }
+
+/* --- PATCH RINGTONE --- */
+let ringtoneUnlocked = false;
+function unlockRingtone() {
+  if (!ringtoneUnlocked) {
+    ringtone.play().then(() => {
+      ringtone.pause();
+      ringtone.currentTime = 0;
+      ringtoneUnlocked = true;
+    }).catch(()=>{});
+  }
+}
+document.addEventListener('click', unlockRingtone);
+document.addEventListener('keydown', unlockRingtone);
+
+function playRingtone(){ if(ringtoneUnlocked){ ringtone.currentTime=0; ringtone.play().catch(()=>{});} }
 function stopRingtone(){ try{ ringtone.pause(); ringtone.currentTime = 0; }catch(e){} }
 
 function saveMyCode(code){
@@ -336,7 +324,6 @@ function rejectCall(from) {
   stopRingtone();
   wsSend({ cmd: 'reject', from });
   hideInterface();
-  setTimeout(() => location.reload(), 500); // recharge aussi ton côté
 }
 
 /* ========= WebRTC ========= */
@@ -403,101 +390,73 @@ muteBtn.addEventListener('click', () => {
   if (!track) return;
   track.enabled = !track.enabled;
   isMuted = !track.enabled;
-  muteBtn.innerHTML = track.enabled ? '<i class="fa fa-microphone"></i>' : '<i class="fa fa-microphone-slash"></i>';
+  muteBtn.innerHTML = isMuted ? '<i class="fa fa-microphone-slash"></i>' : '<i class="fa fa-microphone"></i>';
 });
 
 function endCallAndReload() {
-  cleanupPeer();
-  setTimeout(() => location.reload(), 900);
+  hideInterface();
+  if (pc) { pc.close(); pc = null; }
+  if (callTimer) { clearInterval(callTimer); callTimer = null; }
+  location.reload();
 }
 
-/* ========= UI: Interface central + timer ========= */
-function showInterface(show, status = 'Appel en cours...') {
+function showInterface(show, status) {
   interfaceCall.style.display = show ? 'block' : 'none';
-  callStatus.textContent = status;
-  if (!show) stopTimer();
+  callStatus.textContent = status || '';
+  seconds = 0;
+  timerEl.textContent = '00:00';
 }
-function hideInterface() { showInterface(false); }
-
+function hideInterface() {
+  interfaceCall.style.display = 'none';
+  seconds = 0;
+  timerEl.textContent = '00:00';
+}
 function startTimer() {
-  seconds = 0; timerEl.textContent = '00:00';
   if (callTimer) clearInterval(callTimer);
   callTimer = setInterval(() => {
     seconds++;
-    const m = String(Math.floor(seconds/60)).padStart(2,'0');
-    const s = String(seconds%60).padStart(2,'0');
-    timerEl.textContent = `${m}:${s}`;
+    const m = String(Math.floor(seconds / 60)).padStart(2,'0');
+    const s = String(seconds % 60).padStart(2,'0');
+    timerEl.textContent = m + ':' + s;
   }, 1000);
 }
-function stopTimer() { if (callTimer) clearInterval(callTimer); timerEl.textContent = '00:00'; }
 
-/* ========= Cleanup ========= */
-function cleanupPeer(){
-  try { if (pc) pc.close(); } catch(e){}
-  pc = null;
-  try {
-    if (localStream) {
-      localStream.getTracks().forEach(t => t.stop());
-      localStream = null;
-    }
-  } catch(e){}
-  stopTimer();
-}
-
-/* ========= sliders & UI bindings ========= */
+/* ========= Sliders gain ========= */
 remoteGain.addEventListener('input', () => {
-  remoteVal.textContent = remoteGain.value + '%';
-  if (remoteAudio) remoteAudio.volume = Number(remoteGain.value) / 100;
+  const v = parseInt(remoteGain.value);
+  remoteVal.textContent = v + '%';
+  remoteAudio.volume = v / 100;
 });
-localGain.addEventListener('input', () => { localVal.textContent = localGain.value + '%'; });
-
-/* ========= unlock ringtone autoplay ========= */
-function unlockAudio() {
-  ringtone.play().then(()=>{ ringtone.pause(); ringtone.currentTime=0; }).catch(()=>{});
-  document.removeEventListener('click', unlockAudio);
-}
-document.addEventListener('click', unlockAudio);
-
-/* ========= Draggable interface ========= */
-(function() {
-  let isDragging = false, offsetX = 0, offsetY = 0;
-  interfaceCall.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    isDragging = true;
-    const rect = interfaceCall.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
-    interfaceCall.style.cursor = 'grabbing';
-    e.preventDefault();
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    interfaceCall.style.left = (e.clientX - offsetX) + 'px';
-    interfaceCall.style.top = (e.clientY - offsetY) + 'px';
-    interfaceCall.style.transform = 'none';
-  });
-  window.addEventListener('mouseup', () => {
-    if (isDragging) {
-      isDragging = false;
-      interfaceCall.style.cursor = 'grab';
-    }
-  });
-  interfaceCall.style.cursor = 'grab';
-})();
-
-/* ========= misc init ========= */
-window.addEventListener('load', () => {
-  renderHistory();
-  const saved = localStorage.getItem('myCode');
-  if (saved) {
-    myCode = saved;
-    myCodeInput.value = saved;
-    if (ws.readyState === WebSocket.OPEN) wsSend({ cmd: 'register', code: saved });
+localGain.addEventListener('input', () => {
+  const v = parseInt(localGain.value);
+  localVal.textContent = v + '%';
+  if (localStream && applyLocalGain.checked) {
+    const track = localStream.getAudioTracks()[0];
+    track.applyConstraints({ volume: v / 100 }).catch(()=>{});
   }
 });
+
+/* ========= Draggable interface ========= */
+let dragStartX=0, dragStartY=0, dragOffX=0, dragOffY=0, dragging=false;
+interfaceCall.addEventListener('mousedown', (e)=> {
+  dragging=true;
+  dragStartX=e.clientX; dragStartY=e.clientY;
+  const rect=interfaceCall.getBoundingClientRect();
+  dragOffX=rect.left; dragOffY=rect.top;
+});
+window.addEventListener('mousemove', (e)=> {
+  if(!dragging) return;
+  const dx=e.clientX-dragStartX; const dy=e.clientY-dragStartY;
+  interfaceCall.style.left=(dragOffX+dx+interfaceCall.offsetWidth/2)+"px";
+  interfaceCall.style.top=(dragOffY+dy+interfaceCall.offsetHeight/2)+"px";
+  interfaceCall.style.transform="translate(-50%,-50%)";
+});
+window.addEventListener('mouseup',()=>{dragging=false;});
+
+/* ========= init ========= */
+renderHistory();
+const saved = localStorage.getItem('myCode');
+if (saved) { myCode = saved; myCodeInput.value = saved; }
 </script>
 </body>
 </html>
-
-
-
