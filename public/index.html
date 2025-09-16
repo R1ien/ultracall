@@ -309,6 +309,7 @@ function rejectCall(from) {
   stopRingtone();
   wsSend({ cmd: 'reject', from });
   hideInterface();
+  setTimeout(() => location.reload(), 500); // recharge aussi ton côté
 }
 
 /* ========= WebRTC ========= */
@@ -470,4 +471,5 @@ window.addEventListener('load', () => {
 </script>
 </body>
 </html>
+
 
