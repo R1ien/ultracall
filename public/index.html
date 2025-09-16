@@ -247,11 +247,12 @@ ws.addEventListener('message', async (ev) => {
       addHistory(callWith);
       break;
 
-    case 'call-rejected':
-      stopRingtone();
-      showNotification(`Ton appel a été refusé par ${msg.from}`, 4000);
-      hideInterface();
-      break;
+  case 'call-rejected':
+  stopRingtone();
+  showNotification(`Ton appel a été refusé par ${msg.from}`, 2000);
+  hideInterface();
+  endCallAndReload(); // recharge celui qui appelle
+  break;
 
     case 'signal':
       await handleSignal(msg.payload, msg.from).catch(e => console.error(e));
@@ -309,6 +310,8 @@ function rejectCall(from) {
   stopRingtone();
   wsSend({ cmd: 'reject', from });
   hideInterface();
+  // recharge aussi celui qui raccroche
+  location.reload();
 }
 
 /* ========= WebRTC ========= */
@@ -443,3 +446,4 @@ window.addEventListener('load', () => {
 </script>
 </body>
 </html>
+
