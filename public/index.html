@@ -32,7 +32,7 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
 .small{font-size:13px;color:#9aa4b2}
 
 /* interface call center */
-#interfaceCall{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);min-width:320px;background:#0f1720;padding:22px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.6);display:none;z-index:999}
+#interfaceCall{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);min-width:320px;background:#0f1720;padding:22px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.6);display:none;z-index:999;cursor:grab;}
 #callStatus{font-size:18px;margin:0 0 8px 0}
 #timer{font-weight:700;color:#4e8cff;margin-bottom:12px;font-size:18px}
 .controls{display:flex;gap:12px;justify-content:center}
@@ -179,36 +179,36 @@ function showNotification(html, timeout = 8000) {
   notificationsDiv.prepend(n);
   if (timeout > 0) setTimeout(() => { if (n.parentNode) n.parentNode.removeChild(n); }, timeout);
 }
+
+/* ========= Ringtone persistant ========= */
 function playRingtone(){
   try {
     const pos = parseFloat(localStorage.getItem('ringtonePos') || '0');
-    ringtone.currentTime = pos > 0 ? pos : 0; // reprendre si dispo
+    ringtone.currentTime = pos > 0 ? pos : 0;
     ringtone.play().catch(()=>{});
   } catch(e){}
 }
-
-// sauvegarder la position toutes les 500ms
-setInterval(() => {
-  if (!ringtone.paused) {
-    localStorage.setItem('ringtonePos', ringtone.currentTime.toString());
-  }
-}, 500);
-
 function stopRingtone(){
   try {
     ringtone.pause();
     ringtone.currentTime = 0;
-    localStorage.removeItem('ringtonePos'); // reset complet
+    localStorage.removeItem('ringtonePos');
+    localStorage.removeItem('incomingCall');
   } catch(e){}
 }
+// sauvegarder position toutes les 500ms
+setInterval(() => {
+  if (!ringtone.paused) localStorage.setItem('ringtonePos', ringtone.currentTime.toString());
+}, 500);
 
+/* ========= save code ========= */
 function saveMyCode(code){
   myCode = code;
   localStorage.setItem('myCode', code);
   myCodeInput.value = code;
 }
 
-/* ========= history (localStorage) ========= */
+/* ========= history ========= */
 function addHistory(code){
   let arr = JSON.parse(localStorage.getItem('callHistory') || '[]');
   if (!arr.includes(code)) arr.unshift(code);
@@ -250,15 +250,15 @@ ws.addEventListener('message', async (ev) => {
       showNotification(`Appel lancé vers ${msg.target}`, 3000);
       break;
 
-   case 'incoming-call':
-  playRingtone();
-  localStorage.setItem('incomingCall', msg.from); // sauvegarde l'appel en attente
-  showNotification(`<strong>${msg.from}</strong> t'appelle<br/>
-    <div style="margin-top:8px">
-      <button class="btn" onclick="answerCall('${msg.from}')"><i class="fa fa-phone"></i> Répondre</button>
-      <button class="btn ghost" onclick="rejectCall('${msg.from}')">Raccrocher</button>
-    </div>`, 0);
-  break;
+    case 'incoming-call':
+      localStorage.setItem('incomingCall', msg.from); // mémoriser appel entrant
+      playRingtone();
+      showNotification(`<strong>${msg.from}</strong> t'appelle<br/>
+        <div style="margin-top:8px">
+          <button class="btn" onclick="answerCall('${msg.from}')"><i class="fa fa-phone"></i> Répondre</button>
+          <button class="btn ghost" onclick="rejectCall('${msg.from}')">Raccrocher</button>
+        </div>`, 0);
+      break;
 
     case 'call-accepted':
       stopRingtone();
@@ -268,12 +268,11 @@ ws.addEventListener('message', async (ev) => {
       addHistory(callWith);
       break;
 
-  case 'call-rejected':
-  stopRingtone();
-  showNotification(`Ton appel a été refusé par ${msg.from}`, 2000);
-  hideInterface();
-  endCallAndReload(); // recharge celui qui appelle
-  break;
+    case 'call-rejected':
+      stopRingtone();
+      showNotification(`Ton appel a été refusé par ${msg.from}`, 4000);
+      hideInterface();
+      break;
 
     case 'signal':
       await handleSignal(msg.payload, msg.from).catch(e => console.error(e));
@@ -320,7 +319,7 @@ function callFriend(target) {
 /* ========= Answer / Reject ========= */
 async function answerCall(from) {
   stopRingtone();
-  localStorage.removeItem('incomingCall'); // appel accepté → plus d'appel en attente
+  localStorage.removeItem('incomingCall');
   callWith = from;
   wsSend({ cmd: 'answer', from: from });
   await startCall(false);
@@ -330,10 +329,9 @@ async function answerCall(from) {
 
 function rejectCall(from) {
   stopRingtone();
-  localStorage.removeItem('incomingCall'); // appel rejeté → flag supprimé
   wsSend({ cmd: 'reject', from });
   hideInterface();
-  location.reload();
+  localStorage.removeItem('incomingCall');
 }
 
 /* ========= WebRTC ========= */
@@ -389,11 +387,9 @@ async function handleSignal(payload, from) {
 /* ========= Hangup / end ========= */
 hangupBtn.addEventListener('click', () => {
   stopRingtone();
-  localStorage.removeItem('incomingCall'); // appel terminé → nettoyage
   if (callWith) wsSend({ cmd: 'hangup', target: callWith });
   location.reload();
 });
-
 
 // Mute button fonctionnel
 muteBtn.addEventListener('click', () => {
@@ -477,13 +473,9 @@ window.addEventListener('load', () => {
         <button class="btn ghost" onclick="rejectCall('${pending}')">Raccrocher</button>
       </div>`, 0);
   } else {
-    // si aucun appel, on nettoie la sonnerie
     localStorage.removeItem('ringtonePos');
   }
 });
 </script>
 </body>
 </html>
-
-
-
