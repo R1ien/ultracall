@@ -160,6 +160,18 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // ---------------- GET FRIENDS ----------------
+if (data.cmd === 'get-friends') {
+  const code = ws.code;
+  if (!code) {
+    safeSend(ws, { type: 'error', message: 'Non enregistré' });
+    return;
+  }
+  const list = friendships.has(code) ? Array.from(friendships.get(code)) : [];
+  safeSend(ws, { type: 'friends-list', friends: list });
+  return;
+}
+
   });
 
   ws.on('close', () => {
@@ -178,3 +190,4 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Ultra Call server running on ${PORT}`));
+
