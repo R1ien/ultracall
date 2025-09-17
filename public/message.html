@@ -28,6 +28,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 #friendsList{display:flex;flex-direction:column;gap:12px}
 .friend{padding:12px;border-radius:10px;background:#0f1720;border:1px solid rgba(255,255,255,0.06);cursor:pointer;display:flex;align-items:center;gap:10px}
 .friend:hover{background:#162b4b}
+.friend.active{background:#162b4b;color:#fff}
 
 /* chat */
 #chatWindow{display:flex;flex-direction:column;gap:10px;height:100%}
@@ -88,17 +89,41 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 </main>
 
 <script>
-/* Loader */
+/* --- Variables globales --- */
+let currentFriend=null;
+let ws=null;
+const myCode = localStorage.getItem("myCode") || "me"+Math.floor(Math.random()*10000);
+localStorage.setItem("myCode",myCode);
+
+/* --- Loader --- */
 function initMessagesPage(){
   document.getElementById('loader').style.display='none';
   document.querySelector('header').style.display='flex';
   document.querySelector('main').style.display='flex';
   renderFriends();
   loadChat();
+  initWS();
 }
 window.addEventListener('load',()=>{ setTimeout(initMessagesPage,600); });
 
-/* Gestion amis */
+/* --- WebSocket --- */
+function initWS(){
+  ws = new WebSocket((location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/ws");
+  ws.onopen=()=> ws.send(JSON.stringify({cmd:"register",code:myCode}));
+  ws.onmessage=(ev)=>{
+    let msg;
+    try{ msg=JSON.parse(ev.data);}catch(e){return;}
+    if(msg.type==="message"){
+      // sauvegarde côté local
+      let conv=JSON.parse(localStorage.getItem("chat_"+msg.from)||"[]");
+      conv.push({from:msg.self?"me":"them",text:msg.text});
+      localStorage.setItem("chat_"+msg.from,JSON.stringify(conv));
+      if(currentFriend===msg.from) loadChat();
+    }
+  }
+}
+
+/* --- Gestion amis --- */
 function renderFriends(){
   const list=document.getElementById('friendsList');
   let arr=JSON.parse(localStorage.getItem('friendsList')||'[]');
@@ -106,23 +131,22 @@ function renderFriends(){
   list.innerHTML='';
   arr.forEach(code=>{
     const div=document.createElement('div');
-    div.className='friend';
+    div.className='friend'+(currentFriend===code?' active':'');
     div.innerHTML='<i class="fa fa-user"></i> '+code;
     div.onclick=()=>openChat(code);
     list.appendChild(div);
   });
 }
 
-let currentFriend=null;
-
-/* Ouvrir un chat */
+/* --- Ouvrir un chat --- */
 function openChat(friend){
   currentFriend=friend;
   localStorage.setItem('currentChat',friend);
+  renderFriends();
   loadChat();
 }
 
-/* Afficher l'historique */
+/* --- Afficher l'historique --- */
 function loadChat(){
   const messagesDiv=document.getElementById('messages');
   messagesDiv.innerHTML='';
@@ -138,7 +162,7 @@ function loadChat(){
   messagesDiv.scrollTop=messagesDiv.scrollHeight;
 }
 
-/* Envoyer message */
+/* --- Envoyer message --- */
 document.getElementById('sendBtn').addEventListener('click',sendMessage);
 document.getElementById('messageInput').addEventListener('keypress',e=>{
   if(e.key==='Enter') sendMessage();
@@ -147,9 +171,17 @@ function sendMessage(){
   const input=document.getElementById('messageInput');
   const txt=input.value.trim();
   if(!txt||!currentFriend) return;
+
+  // sauvegarde locale
   let conv=JSON.parse(localStorage.getItem('chat_'+currentFriend)||'[]');
   conv.push({from:'me',text:txt});
   localStorage.setItem('chat_'+currentFriend,JSON.stringify(conv));
+
+  // envoi serveur
+  if(ws && ws.readyState===1){
+    ws.send(JSON.stringify({cmd:"message",from:myCode,target:currentFriend,text:txt}));
+  }
+
   input.value='';
   loadChat();
 }
