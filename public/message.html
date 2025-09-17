@@ -91,7 +91,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 <script>
 let ws = null;
 let currentFriend = null;
-const myCode = prompt("Entrez votre code ami :"); // ou récupère depuis login
+const myCode = localStorage.getItem('myCode'); // récupère ton code automatiquement
+if (!myCode) {
+  alert("Aucun code trouvé, retourne sur l'accueil !");
+  window.location.href = 'index.html';
+}
+// récupère la liste d'amis
+let friendsArray = JSON.parse(localStorage.getItem('friendsList') || '[]');
+
 const friendsListKey = 'friendsList';
 
 function initWebSocket() {
