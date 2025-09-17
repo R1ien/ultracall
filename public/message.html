@@ -89,103 +89,105 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 </main>
 
 <script>
-/* --- Variables globales --- */
-let currentFriend=null;
-let ws=null;
-const myCode = localStorage.getItem("myCode") || "me"+Math.floor(Math.random()*10000);
-localStorage.setItem("myCode",myCode);
+let ws = null;
+let currentFriend = null;
+const myCode = prompt("Entrez votre code ami :"); // ou récupère depuis login
+const friendsListKey = 'friendsList';
 
-/* --- Loader --- */
-function initMessagesPage(){
-  document.getElementById('loader').style.display='none';
-  document.querySelector('header').style.display='flex';
-  document.querySelector('main').style.display='flex';
-  renderFriends();
-  loadChat();
-  initWS();
-}
-window.addEventListener('load',()=>{ setTimeout(initMessagesPage,600); });
-
-/* --- WebSocket --- */
-function initWS(){
-  ws = new WebSocket((location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/ws");
-  ws.onopen=()=> ws.send(JSON.stringify({cmd:"register",code:myCode}));
-  ws.onmessage=(ev)=>{
-    let msg;
-    try{ msg=JSON.parse(ev.data);}catch(e){return;}
-    if(msg.type==="message"){
-      // sauvegarde côté local
-      let conv=JSON.parse(localStorage.getItem("chat_"+msg.from)||"[]");
-      conv.push({from:msg.self?"me":"them",text:msg.text});
-      localStorage.setItem("chat_"+msg.from,JSON.stringify(conv));
-      if(currentFriend===msg.from) loadChat();
+function initWebSocket() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => ws.send(JSON.stringify({ cmd: 'register', code: myCode }));
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'message') {
+      // si la conversation ouverte est celle de l'expéditeur
+      if (data.from === currentFriend) {
+        addMessageToChat('them', data.message);
+      }
+      // sinon on peut mettre une notif ou badge
+      saveMessage(data.from, 'them', data.message);
     }
-  }
+    if (data.type === 'friends-list') renderFriends(data.friends);
+  };
 }
 
-/* --- Gestion amis --- */
-function renderFriends(){
-  const list=document.getElementById('friendsList');
-  let arr=JSON.parse(localStorage.getItem('friendsList')||'[]');
-  if(arr.length===0){ list.innerHTML='<div class="small">Aucun ami ajouté</div>'; return; }
-  list.innerHTML='';
-  arr.forEach(code=>{
-    const div=document.createElement('div');
-    div.className='friend'+(currentFriend===code?' active':'');
-    div.innerHTML='<i class="fa fa-user"></i> '+code;
-    div.onclick=()=>openChat(code);
-    list.appendChild(div);
+// ---------------- FRIENDS ----------------
+function renderFriends(list) {
+  const friendsDiv = document.getElementById('friendsList');
+  if (!list) list = JSON.parse(localStorage.getItem(friendsListKey) || '[]');
+  friendsDiv.innerHTML = '';
+  if (list.length === 0) friendsDiv.innerHTML = '<div class="small">Aucun ami</div>';
+  list.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'friend' + (f === currentFriend ? ' active' : '');
+    div.textContent = f;
+    div.onclick = () => openChat(f);
+    friendsDiv.appendChild(div);
   });
 }
 
-/* --- Ouvrir un chat --- */
-function openChat(friend){
-  currentFriend=friend;
-  localStorage.setItem('currentChat',friend);
-  renderFriends();
+// ---------------- CHAT ----------------
+function openChat(friend) {
+  currentFriend = friend;
   loadChat();
+  renderFriends(); // met à jour la couleur du bouton
 }
 
-/* --- Afficher l'historique --- */
-function loadChat(){
-  const messagesDiv=document.getElementById('messages');
-  messagesDiv.innerHTML='';
-  currentFriend=localStorage.getItem('currentChat');
-  if(!currentFriend){ messagesDiv.innerHTML='<div class="small">Choisis un ami pour discuter</div>'; return; }
-  let conv=JSON.parse(localStorage.getItem('chat_'+currentFriend)||'[]');
-  conv.forEach(m=>{
-    const div=document.createElement('div');
-    div.className='msg '+m.from;
-    div.textContent=m.text;
-    messagesDiv.appendChild(div);
-  });
-  messagesDiv.scrollTop=messagesDiv.scrollHeight;
+function loadChat() {
+  const messagesDiv = document.getElementById('messages');
+  messagesDiv.innerHTML = '';
+  if (!currentFriend) { messagesDiv.innerHTML = '<div class="small">Choisis un ami</div>'; return; }
+  const conv = JSON.parse(localStorage.getItem('chat_' + currentFriend) || '[]');
+  conv.forEach(m => addMessageToChat(m.from, m.text));
 }
 
-/* --- Envoyer message --- */
-document.getElementById('sendBtn').addEventListener('click',sendMessage);
-document.getElementById('messageInput').addEventListener('keypress',e=>{
-  if(e.key==='Enter') sendMessage();
+function addMessageToChat(from, text) {
+  const messagesDiv = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg ' + from;
+  div.textContent = text;
+  messagesDiv.appendChild(div);
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// sauvegarde localStorage
+function saveMessage(friend, from, text) {
+  const conv = JSON.parse(localStorage.getItem('chat_' + friend) || '[]');
+  conv.push({ from, text });
+  localStorage.setItem('chat_' + friend, JSON.stringify(conv));
+}
+
+// envoyer message
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+document.getElementById('messageInput').addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+
+function sendMessage() {
+  const input = document.getElementById('messageInput');
+  const txt = input.value.trim();
+  if (!txt || !currentFriend) return;
+  addMessageToChat('me', txt);
+  saveMessage(currentFriend, 'me', txt);
+
+  // envoi au serveur
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ cmd: 'message', target: currentFriend, message: txt, from: myCode }));
+  }
+  input.value = '';
+}
+
+// init page
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    document.getElementById('loader').style.display = 'none';
+    document.querySelector('header').style.display = 'flex';
+    document.querySelector('main').style.display = 'flex';
+    currentFriend = localStorage.getItem('currentChat');
+    initWebSocket();
+    renderFriends();
+    loadChat();
+  }, 600);
 });
-function sendMessage(){
-  const input=document.getElementById('messageInput');
-  const txt=input.value.trim();
-  if(!txt||!currentFriend) return;
-
-  // sauvegarde locale
-  let conv=JSON.parse(localStorage.getItem('chat_'+currentFriend)||'[]');
-  conv.push({from:'me',text:txt});
-  localStorage.setItem('chat_'+currentFriend,JSON.stringify(conv));
-
-  // envoi serveur
-  if(ws && ws.readyState===1){
-    ws.send(JSON.stringify({cmd:"message",from:myCode,target:currentFriend,text:txt}));
-  }
-
-  input.value='';
-  loadChat();
-}
 </script>
-
+  
 </body>
 </html>
