@@ -14,8 +14,8 @@ const pendingCalls = new Map();  // calleeCode -> callerCode
 const friendRequests = new Map(); // targetCode -> Set of pending requests
 const friendships = new Map();    // code -> Set of friends
 
-function safeSend(ws, obj){
-  try { ws.send(JSON.stringify(obj)); } catch (e){ /* ignore */ }
+function safeSend(ws, obj) {
+  try { ws.send(JSON.stringify(obj)); } catch (e) { /* ignore */ }
 }
 
 wss.on('connection', (ws) => {
@@ -44,28 +44,38 @@ wss.on('connection', (ws) => {
       const targetWs = users.get(target);
       if (!targetWs) { safeSend(ws, { type: 'error', message: 'Ami non connecté' }); return; }
 
+      // enregistrer l'appel
       pendingCalls.set(target, sender);
+
+      // notifier le receveur
       safeSend(targetWs, { type: 'incoming-call', from: sender });
+      // notifier l'appelant
       safeSend(ws, { type: 'call-placed', target });
       return;
     }
 
     if (data.cmd === 'answer') {
       const callee = ws.code;
-      const callerCode = (typeof data.from === 'string' && data.from.trim()) ? data.from.trim() : pendingCalls.get(callee);
+      const callerCode = pendingCalls.get(callee);
       if (!callerCode) { safeSend(ws, { type: 'error', message: 'Appel introuvable' }); return; }
       const callerWs = users.get(callerCode);
-      if (!callerWs) { safeSend(ws, { type: 'error', message: 'Appelant déconnecté' }); pendingCalls.delete(callee); return; }
+      if (!callerWs) { 
+        safeSend(ws, { type: 'error', message: 'Appelant déconnecté' }); 
+        pendingCalls.delete(callee); 
+        return; 
+      }
 
+      // notifier les 2
       safeSend(callerWs, { type: 'call-accepted', with: callee });
       safeSend(ws, { type: 'call-accepted', with: callerCode });
+
       pendingCalls.delete(callee);
       return;
     }
 
     if (data.cmd === 'reject') {
       const callee = ws.code;
-      const callerCode = (typeof data.from === 'string' && data.from.trim()) ? data.from.trim() : pendingCalls.get(callee);
+      const callerCode = pendingCalls.get(callee);
       if (callerCode) {
         const callerWs = users.get(callerCode);
         if (callerWs) safeSend(callerWs, { type: 'call-rejected', from: callee });
@@ -87,10 +97,16 @@ wss.on('connection', (ws) => {
       const target = String(data.target || '').trim();
       if (!target) return;
       const targetWs = users.get(target);
+
+      // notifier les 2
       if (targetWs) safeSend(targetWs, { type: 'call-ended', from: sender });
       safeSend(ws, { type: 'call-ended', from: sender });
+
+      // supprimer les appels en cours
       for (const [callee, caller] of pendingCalls.entries()) {
-        if (callee === target || caller === target || callee === sender || caller === sender) pendingCalls.delete(callee);
+        if (callee === target || caller === target || callee === sender || caller === sender) {
+          pendingCalls.delete(callee);
+        }
       }
       return;
     }
@@ -144,7 +160,10 @@ wss.on('connection', (ws) => {
     if (data.cmd === 'message') {
       const target = String(data.target || '').trim();
       const message = String(data.message || '').trim();
-      if (!target || !message) { safeSend(ws, { type:'error', message:'Target ou message manquant' }); return; }
+      if (!target || !message) { 
+        safeSend(ws, { type:'error', message:'Target ou message manquant' }); 
+        return; 
+      }
       if (!friendships.has(sender) || !friendships.get(sender).has(target)) {
         safeSend(ws, { type:'error', message:'Vous n\'êtes pas ami avec cette personne' });
         return;
