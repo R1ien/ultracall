@@ -113,6 +113,13 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
         <input id="localGain" class="range" type="range" min="0" max="200" value="100" />
       </div>
     </div>
+
+    <h3 style="margin-top:18px">Amis / Contacts</h3>
+    <input id="friendRequestCode" type="text" placeholder="Code ami à ajouter" />
+    <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+      <button id="sendFriendRequestBtn" class="btn"><i class="fa fa-user-plus"></i> Envoyer demande</button>
+    </div>
+    <div id="friendsList" style="margin-top:12px"></div>
   </section>
 
   <aside class="col card">
@@ -172,6 +179,10 @@ const registerBtn = document.getElementById('registerBtn');
 const friendCodeInput = document.getElementById('friendCode');
 const callBtn = document.getElementById('callBtn');
 const callFromHistoryBtn = document.getElementById('callFromHistoryBtn');
+
+const friendRequestInput = document.getElementById('friendRequestCode');
+const sendFriendRequestBtn = document.getElementById('sendFriendRequestBtn');
+const friendsListDiv = document.getElementById('friendsList');
 
 const historyDiv = document.getElementById('history');
 const notificationsDiv = document.getElementById('notifications');
@@ -257,6 +268,26 @@ function renderHistory(){
   }
 }
 
+/* ========= Friends List ========= */
+function renderFriendsList() {
+  friendsListDiv.innerHTML = '';
+  let arr = JSON.parse(localStorage.getItem('friendsList') || '[]');
+  if (arr.length === 0) { friendsListDiv.innerHTML = '<div class="small">Aucun ami ajouté</div>'; return; }
+  for (const code of arr) {
+    const div = document.createElement('div');
+    div.className = 'small';
+    div.style.marginBottom = '6px';
+    div.innerHTML = `<i class="fa fa-user"></i> ${code} <button class="btn ghost" style="font-size:11px" onclick="callFriend('${code}')">Appeler</button>`;
+    friendsListDiv.appendChild(div);
+  }
+}
+function addFriend(code) {
+  let arr = JSON.parse(localStorage.getItem('friendsList') || '[]');
+  if (!arr.includes(code)) arr.push(code);
+  localStorage.setItem('friendsList', JSON.stringify(arr));
+  renderFriendsList();
+}
+
 /* ========= WS message handling ========= */
 ws.addEventListener('message', async (ev) => {
   let msg;
@@ -306,6 +337,22 @@ ws.addEventListener('message', async (ev) => {
       endCallAndReload(true); // reload pour les deux côtés
       break;
 
+    /* ===== Friend requests ===== */
+    case 'friend-request':
+      showNotification(`<strong>${msg.from}</strong> t'envoie une demande d'ami<br/>
+        <div style="margin-top:8px">
+          <button class="btn" onclick="acceptFriend('${msg.from}')">Accepter</button>
+          <button class="btn ghost" onclick="rejectFriend('${msg.from}')">Refuser</button>
+        </div>`, 0);
+      break;
+    case 'friend-accepted':
+      addFriend(msg.from);
+      showNotification(`<strong>${msg.from}</strong> a accepté ta demande`, 4000);
+      break;
+    case 'friend-rejected':
+      showNotification(`<strong>${msg.from}</strong> a refusé ta demande`, 4000);
+      break;
+
     case 'error':
       showNotification(`Erreur: ${msg.message}`, 4000);
       break;
@@ -331,12 +378,25 @@ callFromHistoryBtn.addEventListener('click', () => {
   if (arr.length) { const last = arr[0]; friendCodeInput.value = last; callFriend(last); }
 });
 
+/* ========= Friend requests UI ========= */
+sendFriendRequestBtn.addEventListener('click', () => {
+  const target = String(friendRequestInput.value || '').trim();
+  if (!target) return alert('Tape le code ami à ajouter');
+  wsSend({ cmd: 'friend-request', target });
+  showNotification(`Demande envoyée à <strong>${target}</strong>`, 4000);
+});
+
+/* ========= Call functions ========= */
 function callFriend(target) {
   callWith = target;
   showInterface(true, 'Appel en cours...');
   wsSend({ cmd: 'call', target });
   addHistory(target);
 }
+
+/* ========= Accept / Reject Friend ========= */
+function acceptFriend(from) { wsSend({ cmd:'friend-accept', target:from }); addFriend(from); }
+function rejectFriend(from) { wsSend({ cmd:'friend-reject', target:from }); showNotification(`Demande refusée à ${from}`, 4000); }
 
 /* ========= Answer / Reject ========= */
 async function answerCall(from) {
@@ -457,6 +517,7 @@ function initApp() {
   if(savedCode) myCodeInput.value = savedCode;
 
   renderHistory();
+  renderFriendsList();
 
   // appel entrant persisté
   const incomingCall = localStorage.getItem('incomingCall');
