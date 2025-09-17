@@ -16,21 +16,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .nav span{padding:6px 10px;border-radius:8px;cursor:pointer}
 .nav .active{background:#162b4b;color:#fff}
 .nav .coming{color:#7b8794}
-
-/* container */
 .container{max-width:1100px;margin:28px auto;padding:20px;display:flex;gap:24px;align-items:flex-start;height:calc(100vh - 100px);}
 .col{flex:1;display:flex;flex-direction:column}
-
-/* card */
 .card{background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02));padding:18px;border-radius:14px;border:1px solid rgba(255,255,255,0.03);flex:1;overflow:auto}
-
-/* amis */
 #friendsList{display:flex;flex-direction:column;gap:12px}
 .friend{padding:12px;border-radius:10px;background:#0f1720;border:1px solid rgba(255,255,255,0.06);cursor:pointer;display:flex;align-items:center;gap:10px}
 .friend:hover{background:#162b4b}
 .friend.active{background:#162b4b;color:#fff}
-
-/* chat */
 #chatWindow{display:flex;flex-direction:column;gap:10px;height:100%}
 .messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
 .msg{max-width:70%;padding:10px 14px;border-radius:12px;line-height:1.4}
@@ -39,8 +31,6 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .inputRow{display:flex;gap:10px;margin-top:auto}
 .inputRow input{flex:1;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:#0f1720;color:#fff}
 .inputRow button{padding:12px 16px;border-radius:10px;background:#4e8cff;color:#041a34;border:none;cursor:pointer}
-
-/* loader */
 #loader {
   position:fixed;
   top:0;left:0;width:100%;height:100%;
@@ -50,15 +40,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 }
 #loader i { font-size:50px; margin-bottom:20px; animation: spin 1.5s linear infinite; }
 @keyframes spin { 0%{transform:rotate(0deg);}100%{transform:rotate(360deg);} }
-
-@media(max-width:800px){
-  .container{flex-direction:column;height:auto}
-}
+@media(max-width:800px){ .container{flex-direction:column;height:auto} }
 </style>
 </head>
 <body>
 
-<!-- écran de chargement -->
 <div id="loader"><i class="fa fa-spinner"></i> Chargement...</div>
 
 <header style="display:none">
@@ -70,13 +56,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 </header>
 
 <main class="container" style="display:none">
-  <!-- Liste d'amis -->
   <aside class="col card" style="flex:0.35">
     <h3>Amis</h3>
     <div id="friendsList"></div>
   </aside>
 
-  <!-- Fenêtre de chat -->
   <section class="col card" style="flex:0.65">
     <div id="chatWindow">
       <div class="messages" id="messages"></div>
@@ -89,113 +73,99 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 </main>
 
 <script>
-let ws = null;
-let currentFriend = null;
-const myCode = localStorage.getItem('myCode'); // récupère ton code automatiquement
-if (!myCode) {
-  alert("Aucun code trouvé, retourne sur l'accueil !");
-  window.location.href = 'index.html';
-}
-// récupère la liste d'amis
-let friendsArray = JSON.parse(localStorage.getItem('friendsList') || '[]');
+let ws=null;
+let currentFriend=null;
+const myCode=localStorage.getItem('myCode');
+if(!myCode){ alert("Aucun code trouvé, retourne sur l'accueil !"); window.location.href='index.html'; }
+let friendsArray = JSON.parse(localStorage.getItem('friendsList')||'[]');
 
-const friendsListKey = 'friendsList';
-
-function initWebSocket() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
-  ws.onopen = () => ws.send(JSON.stringify({ cmd: 'register', code: myCode }));
-  ws.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-    if (data.type === 'message') {
-      // si la conversation ouverte est celle de l'expéditeur
-      if (data.from === currentFriend) {
-        addMessageToChat('them', data.message);
-      }
-      // sinon on peut mettre une notif ou badge
-      saveMessage(data.from, 'them', data.message);
+function initWebSocket(){
+  ws=new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen=()=>ws.send(JSON.stringify({cmd:'register', code:myCode}));
+  ws.onmessage=(e)=>{
+    const data=JSON.parse(e.data);
+    if(data.type==='message'){
+      saveMessage(data.from,'them',data.message);
+      if(data.from===currentFriend) addMessageToChat('them',data.message);
     }
-    if (data.type === 'friends-list') renderFriends(data.friends);
+    if(data.type==='friends-list') renderFriends(data.friends);
   };
 }
 
 // ---------------- FRIENDS ----------------
-function renderFriends(list) {
-  const friendsDiv = document.getElementById('friendsList');
-  if (!list) list = friendsArray; // récupéré depuis localStorage
-  friendsDiv.innerHTML = '';
-  if (list.length === 0) friendsDiv.innerHTML = '<div class="small">Aucun ami</div>';
-  list.forEach(f => {
-    const div = document.createElement('div');
-    div.className = 'friend' + (f === currentFriend ? ' active' : '');
-    div.textContent = f;
-    div.onclick = () => openChat(f);
+function renderFriends(list){
+  const friendsDiv=document.getElementById('friendsList');
+  if(!list) list=friendsArray;
+  friendsDiv.innerHTML='';
+  if(list.length===0){ friendsDiv.innerHTML='<div class="small">Aucun ami</div>'; return; }
+  list.forEach(f=>{
+    const div=document.createElement('div');
+    div.className='friend'+(f===currentFriend?' active':'');
+    div.textContent=f;
+    div.onclick=()=>openChat(f);
     friendsDiv.appendChild(div);
   });
 }
 
-
 // ---------------- CHAT ----------------
-function openChat(friend) {
-  currentFriend = friend;
+function openChat(friend){
+  currentFriend=friend;
+  localStorage.setItem('currentChat',friend);
   loadChat();
-  renderFriends(); // met à jour la couleur du bouton
+  renderFriends();
 }
 
-function loadChat() {
-  const messagesDiv = document.getElementById('messages');
-  messagesDiv.innerHTML = '';
-  if (!currentFriend) { messagesDiv.innerHTML = '<div class="small">Choisis un ami</div>'; return; }
-  const conv = JSON.parse(localStorage.getItem('chat_' + currentFriend) || '[]');
-  conv.forEach(m => addMessageToChat(m.from, m.text));
+function loadChat(){
+  const messagesDiv=document.getElementById('messages');
+  messagesDiv.innerHTML='';
+  if(!currentFriend){ messagesDiv.innerHTML='<div class="small">Choisis un ami</div>'; return; }
+  const conv=JSON.parse(localStorage.getItem('chat_'+currentFriend)||'[]');
+  conv.forEach(m=>addMessageToChat(m.from,m.text));
 }
 
-function addMessageToChat(from, text) {
-  const messagesDiv = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = 'msg ' + from;
-  div.textContent = text;
+function addMessageToChat(from,text){
+  const messagesDiv=document.getElementById('messages');
+  const div=document.createElement('div');
+  div.className='msg '+from;
+  div.textContent=text;
   messagesDiv.appendChild(div);
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  messagesDiv.scrollTop=messagesDiv.scrollHeight;
 }
 
-// sauvegarde localStorage
-function saveMessage(friend, from, text) {
-  const conv = JSON.parse(localStorage.getItem('chat_' + friend) || '[]');
-  conv.push({ from, text });
-  localStorage.setItem('chat_' + friend, JSON.stringify(conv));
+function saveMessage(friend,from,text){
+  const conv=JSON.parse(localStorage.getItem('chat_'+friend)||'[]');
+  conv.push({from,text});
+  localStorage.setItem('chat_'+friend,JSON.stringify(conv));
 }
 
-// envoyer message
-document.getElementById('sendBtn').addEventListener('click', sendMessage);
-document.getElementById('messageInput').addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
-
-function sendMessage() {
-  const input = document.getElementById('messageInput');
-  const txt = input.value.trim();
-  if (!txt || !currentFriend) return;
-  addMessageToChat('me', txt);
-  saveMessage(currentFriend, 'me', txt);
-
-  // envoi au serveur
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ cmd: 'message', target: currentFriend, message: txt, from: myCode }));
+// ---------------- SEND ----------------
+document.getElementById('sendBtn').addEventListener('click',sendMessage);
+document.getElementById('messageInput').addEventListener('keypress',e=>{if(e.key==='Enter')sendMessage();});
+function sendMessage(){
+  const input=document.getElementById('messageInput');
+  const txt=input.value.trim();
+  if(!txt||!currentFriend)return;
+  addMessageToChat('me',txt);
+  saveMessage(currentFriend,'me',txt);
+  if(ws && ws.readyState===WebSocket.OPEN){
+    ws.send(JSON.stringify({cmd:'message',target:currentFriend,message:txt,from:myCode}));
   }
-  input.value = '';
+  input.value='';
 }
 
-// init page
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    document.getElementById('loader').style.display = 'none';
-    document.querySelector('header').style.display = 'flex';
-    document.querySelector('main').style.display = 'flex';
-    currentFriend = localStorage.getItem('currentChat');
+// ---------------- INIT PAGE ----------------
+window.addEventListener('load',()=>{
+  setTimeout(()=>{
+    document.getElementById('loader').style.display='none';
+    document.querySelector('header').style.display='flex';
+    document.querySelector('main').style.display='flex';
+    currentFriend=localStorage.getItem('currentChat');
     initWebSocket();
     renderFriends();
     loadChat();
-  }, 600);
+  },600);
 });
 </script>
-  
+
 </body>
 </html>
