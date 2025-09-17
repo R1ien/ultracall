@@ -9,8 +9,8 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
 // maps
-const users = new Map();          // code -> ws
-const pendingCalls = new Map();   // calleeCode -> callerCode
+const users = new Map();         // code -> ws
+const pendingCalls = new Map();  // calleeCode -> callerCode
 const friendRequests = new Map(); // targetCode -> Set of pending requests
 const friendships = new Map();    // code -> Set of friends
 
