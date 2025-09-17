@@ -86,7 +86,9 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
     </div>
     Ultra Call
   </div>
-  <div class="nav"><span class="active">Appels</span><span class="coming">Messages (Coming Soon)</span></div>
+  <div class="nav">
+    <button id="btnAppels" class="active">Appels</button>
+    <button id="btnMessages">Messages</button>
 </header>
 
 
@@ -210,6 +212,8 @@ const localGain = document.getElementById('localGain');
 const localVal = document.getElementById('localVal');
 
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+  document.getElementById("btnAppels").addEventListener("click", ()=>{ window.location.href="index.html"; });
+document.getElementById("btnMessages").addEventListener("click", ()=>{ window.location.href="messages.html"; });
 
 /* ========= helpers ========= */
 function showNotification(html, timeout = 8000) {
@@ -599,4 +603,5 @@ window.addEventListener('load', ()=>{ setTimeout(initApp, 500); });
 
 </body>
 </html>
+
 
