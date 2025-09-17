@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -8,21 +9,13 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
 // maps
-const users = new Map();         // code -> ws
-const pendingCalls = new Map();  // calleeCode -> callerCode
+const users = new Map();          // code -> ws
+const pendingCalls = new Map();   // calleeCode -> callerCode
 const friendRequests = new Map(); // targetCode -> Set of pending requests
 const friendships = new Map();    // code -> Set of friends
 
 function safeSend(ws, obj){
   try { ws.send(JSON.stringify(obj)); } catch (e){ /* ignore */ }
-}
-
-// helper: renvoyer la liste d'amis
-function sendFriendsList(code){
-  const ws = users.get(code);
-  if (!ws) return;
-  const list = friendships.has(code) ? Array.from(friendships.get(code)) : [];
-  safeSend(ws, { type:'friends-list', friends:list });
 }
 
 wss.on('connection', (ws) => {
@@ -41,14 +34,6 @@ wss.on('connection', (ws) => {
       users.set(code, ws);
       if (!friendships.has(code)) friendships.set(code, new Set());
       safeSend(ws, { type: 'registered', code });
-      // envoyer la liste d'amis au client qui vient de se connecter
-      sendFriendsList(code);
-      return;
-    }
-
-    // ---------------- FRIENDS LIST ----------------
-    if (data.cmd === 'friends-list') {
-      sendFriendsList(sender);
       return;
     }
 
@@ -131,9 +116,6 @@ wss.on('connection', (ws) => {
       friendships.get(target).add(ws.code);
       const targetWs = users.get(target);
       if (targetWs) safeSend(targetWs, { type: 'friend-accepted', from: ws.code });
-      // mettre à jour la liste des deux côtés
-      sendFriendsList(ws.code);
-      sendFriendsList(target);
       return;
     }
 
@@ -143,6 +125,18 @@ wss.on('connection', (ws) => {
       if (friendRequests.has(ws.code)) friendRequests.get(ws.code).delete(target);
       const targetWs = users.get(target);
       if (targetWs) safeSend(targetWs, { type: 'friend-rejected', from: ws.code });
+      return;
+    }
+
+    // ---------------- GET FRIENDS ----------------
+    if (data.cmd === 'get-friends') {
+      const code = ws.code;
+      if (!code) {
+        safeSend(ws, { type: 'error', message: 'Non enregistré' });
+        return;
+      }
+      const list = friendships.has(code) ? Array.from(friendships.get(code)) : [];
+      safeSend(ws, { type: 'friends-list', friends: list });
       return;
     }
 
@@ -159,18 +153,6 @@ wss.on('connection', (ws) => {
       if (targetWs) safeSend(targetWs, { type:'message', from: sender, message });
       return;
     }
-
-    // ---------------- GET FRIENDS ----------------
-if (data.cmd === 'get-friends') {
-  const code = ws.code;
-  if (!code) {
-    safeSend(ws, { type: 'error', message: 'Non enregistré' });
-    return;
-  }
-  const list = friendships.has(code) ? Array.from(friendships.get(code)) : [];
-  safeSend(ws, { type: 'friends-list', friends: list });
-  return;
-}
 
   });
 
@@ -190,4 +172,3 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Ultra Call server running on ${PORT}`));
-
