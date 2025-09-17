@@ -241,10 +241,6 @@ function saveMyCode(code){
   myCodeInput.value = code;
 }
 
-  // après registration / login
-localStorage.setItem('myCode', userCode);           // ton code unique
-localStorage.setItem('friendsList', JSON.stringify(friendsArray)); // liste d'amis
-
 /* ========= history ========= */
 function addHistory(code){
   let arr = JSON.parse(localStorage.getItem('callHistory') || '[]');
@@ -538,4 +534,5 @@ window.addEventListener('load', ()=>{ setTimeout(initApp, 500); });
 
 </body>
 </html>
+
 
