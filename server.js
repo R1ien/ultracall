@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -18,6 +17,14 @@ function safeSend(ws, obj){
   try { ws.send(JSON.stringify(obj)); } catch (e){ /* ignore */ }
 }
 
+// helper: renvoyer la liste d'amis
+function sendFriendsList(code){
+  const ws = users.get(code);
+  if (!ws) return;
+  const list = friendships.has(code) ? Array.from(friendships.get(code)) : [];
+  safeSend(ws, { type:'friends-list', friends:list });
+}
+
 wss.on('connection', (ws) => {
   ws.on('message', (raw) => {
     let data;
@@ -34,6 +41,14 @@ wss.on('connection', (ws) => {
       users.set(code, ws);
       if (!friendships.has(code)) friendships.set(code, new Set());
       safeSend(ws, { type: 'registered', code });
+      // envoyer la liste d'amis au client qui vient de se connecter
+      sendFriendsList(code);
+      return;
+    }
+
+    // ---------------- FRIENDS LIST ----------------
+    if (data.cmd === 'friends-list') {
+      sendFriendsList(sender);
       return;
     }
 
@@ -109,15 +124,16 @@ wss.on('connection', (ws) => {
     if (data.cmd === 'friend-accept') {
       const target = String(data.target || '').trim();
       if (!target) return;
-      // remove pending
       if (friendRequests.has(ws.code)) friendRequests.get(ws.code).delete(target);
-      // add to friendships
       if (!friendships.has(ws.code)) friendships.set(ws.code, new Set());
       if (!friendships.has(target)) friendships.set(target, new Set());
       friendships.get(ws.code).add(target);
       friendships.get(target).add(ws.code);
       const targetWs = users.get(target);
       if (targetWs) safeSend(targetWs, { type: 'friend-accepted', from: ws.code });
+      // mettre à jour la liste des deux côtés
+      sendFriendsList(ws.code);
+      sendFriendsList(target);
       return;
     }
 
@@ -135,7 +151,6 @@ wss.on('connection', (ws) => {
       const target = String(data.target || '').trim();
       const message = String(data.message || '').trim();
       if (!target || !message) { safeSend(ws, { type:'error', message:'Target ou message manquant' }); return; }
-      // only allow if target is a friend
       if (!friendships.has(sender) || !friendships.get(sender).has(target)) {
         safeSend(ws, { type:'error', message:'Vous n\'êtes pas ami avec cette personne' });
         return;
@@ -150,11 +165,9 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (ws.code) {
       users.delete(ws.code);
-      // cleanup pending calls
       for (const [callee, caller] of pendingCalls.entries()) {
         if (caller === ws.code || callee === ws.code) pendingCalls.delete(callee);
       }
-      // cleanup friend requests
       friendRequests.delete(ws.code);
     }
   });
