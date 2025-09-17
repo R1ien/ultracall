@@ -1,183 +1,182 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Ultra Call - Messages</title>
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-<style>
-*{box-sizing:border-box}
-body,html{margin:0;padding:0;height:100%;font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial;color:#fff;background:linear-gradient(135deg,#0b0b0f 0%,#13131a 100%);}
-header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:rgba(7,10,20,0.6);backdrop-filter:blur(6px);border-bottom:1px solid rgba(255,255,255,0.03)}
-.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;color:#4e8cff}
-.logo .badge{background:linear-gradient(90deg,#6fb3ff,#3a6fdc);padding:8px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px}
-.nav{display:flex;gap:12px;align-items:center}
-.nav span{padding:6px 10px;border-radius:8px}
-.nav .active{background:#162b4b;color:#fff}
-.nav .coming{color:#7b8794; cursor:pointer;}
-
-/* container */
-.container{max-width:1000px;margin:28px auto;padding:20px;display:flex;gap:24px;align-items:flex-start}
-
-/* colonne amis */
-#friendsList{flex:1;max-width:250px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02));padding:18px;border-radius:14px;border:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;gap:10px}
-.friendBtn{background:#071022;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);color:#dfeaf7;cursor:pointer;text-align:left}
-.friendBtn.active{background:#162b4b;color:#fff}
-
-/* colonne conversation */
-#chatBox{flex:2;display:flex;flex-direction:column;height:600px}
-#messages{flex:1;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02));padding:18px;border-radius:14px;border:1px solid rgba(255,255,255,0.03);overflow-y:auto;display:flex;flex-direction:column;gap:10px}
-.message{padding:10px;border-radius:10px;max-width:70%}
-.message.sent{background:#4e8cff;color:#041a34;align-self:flex-end}
-.message.received{background:#071022;color:#fff;align-self:flex-start}
-#inputArea{display:flex;gap:10px;margin-top:10px}
-#inputArea input{flex:1;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:#0f1720;color:#fff}
-#inputArea button{padding:12px 16px;border-radius:10px;background:#4e8cff;color:#041a34;border:none;cursor:pointer}
-
-/* notifications */
-#notifications{position:fixed;right:18px;top:18px;width:320px;display:flex;flex-direction:column;gap:10px;z-index:1000}
-.notification{background:#0b1014;padding:12px 14px;border-radius:12px;border-left:4px solid #4e8cff;color:#e6eef8;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
-</style>
+  <meta charset="UTF-8">
+  <title>Ultra Call - Messages</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #0f0f0f, #1e1e1e);
+      color: white;
+    }
+    #friends {
+      width: 220px;
+      border-right: 1px solid #333;
+      padding: 10px;
+      overflow-y: auto;
+      background: #161616;
+    }
+    #friends h3 {
+      margin-top: 0;
+      text-align: center;
+      font-size: 18px;
+      border-bottom: 1px solid #444;
+      padding-bottom: 5px;
+    }
+    #friendsList button {
+      display: block;
+      width: 100%;
+      margin: 6px 0;
+      padding: 10px;
+      border: none;
+      background: #2c2c2c;
+      color: white;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: background 0.2s;
+    }
+    #friendsList button:hover {
+      background: #3d3d3d;
+    }
+    #chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    #messages {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+      border-bottom: 1px solid #333;
+    }
+    #messages h4 {
+      margin-top: 0;
+      text-align: center;
+      color: #aaa;
+    }
+    .msg {
+      margin: 5px 0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      max-width: 70%;
+      word-wrap: break-word;
+    }
+    .me {
+      background: #4CAF50;
+      color: white;
+      margin-left: auto;
+    }
+    .other {
+      background: #2c2c2c;
+      color: #ddd;
+      margin-right: auto;
+    }
+    #inputArea {
+      display: flex;
+    }
+    #inputArea input {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-top: 1px solid #333;
+      background: #1a1a1a;
+      color: white;
+      font-size: 14px;
+    }
+    #inputArea button {
+      padding: 12px 18px;
+      border: none;
+      background: #4CAF50;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #inputArea button:hover {
+      background: #45a049;
+    }
+  </style>
 </head>
 <body>
-<header>
-  <div class="logo"><div class="badge"><i class="fa fa-comments"></i></div>Ultra Call</div>
-  <div class="nav"><span class="active">Messages</span><span class="coming" id="backToApp">Appels</span></div>
-</header>
-
-<main class="container">
-  <div id="friendsList">
-    <div class="small">Liste d'amis</div>
-    <!-- boutons amis seront ajoutés dynamiquement -->
+  <div id="friends">
+    <h3>Amis</h3>
+    <div id="friendsList">Chargement...</div>
   </div>
-  <div id="chatBox">
-    <div id="messages"></div>
+  <div id="chat">
+    <div id="messages"><h4>Sélectionne un ami pour discuter</h4></div>
     <div id="inputArea">
-      <input id="messageInput" type="text" placeholder="Tape ton message..." />
-      <button id="sendBtn"><i class="fa fa-paper-plane"></i> Envoyer</button>
+      <input type="text" id="msgInput" placeholder="Écris un message...">
+      <button onclick="sendMessage()">Envoyer</button>
     </div>
   </div>
-</main>
 
-<div id="notifications"></div>
+  <script>
+    const myCode = localStorage.getItem("myCode");
+    if (!myCode) {
+      alert("Aucun code trouvé, retourne à l'accueil !");
+      window.location.href = "/";
+    }
 
-<script>
-const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
-let ws = new WebSocket(WS_URL);
-let myCode = localStorage.getItem('myCode') || '';
-let friends = new Set();
-let chatHistory = {}; // friendCode -> array of messages
-let currentFriend = null;
+    const ws = new WebSocket(`ws://${window.location.host}/ws`);
+    let currentFriend = null;
 
-const friendsListDiv = document.getElementById('friendsList');
-const messagesDiv = document.getElementById('messages');
-const messageInput = document.getElementById('messageInput');
-const sendBtn = document.getElementById('sendBtn');
-const notificationsDiv = document.getElementById('notifications');
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ cmd: "register", code: myCode }));
+      ws.send(JSON.stringify({ cmd: "get-friends" }));
+    };
 
-// send function
-function wsSend(obj){
-  if(obj.cmd !== 'register' && !obj.from) obj.from = myCode;
-  ws.send(JSON.stringify(obj));
-}
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
 
-// ------------------ Notifications ------------------
-function showNotification(html, timeout = 5000) {
-  const n = document.createElement('div');
-  n.className = 'notification';
-  n.innerHTML = html;
-  notificationsDiv.prepend(n);
-  if(timeout>0) setTimeout(()=>{ if(n.parentNode) n.parentNode.removeChild(n); }, timeout);
-}
+      if (data.type === "friends-list") {
+        const listEl = document.getElementById("friendsList");
+        listEl.innerHTML = "";
+        if (data.friends.length === 0) {
+          listEl.textContent = "Aucun ami.";
+        } else {
+          data.friends.forEach(friend => {
+            const btn = document.createElement("button");
+            btn.textContent = friend;
+            btn.onclick = () => openConversation(friend);
+            listEl.appendChild(btn);
+          });
+        }
+      }
 
-// ------------------ FRIENDS UI ------------------
-function renderFriends(){
-  friendsListDiv.querySelectorAll('.friendBtn').forEach(b=>b.remove());
-  friends.forEach(f=>{
-    const btn = document.createElement('button');
-    btn.className='friendBtn'+(f===currentFriend?' active':'');
-    btn.textContent = f;
-    btn.onclick=()=>{ selectFriend(f); };
-    friendsListDiv.appendChild(btn);
-  });
-}
+      if (data.type === "message") {
+        if (currentFriend === data.from) {
+          addMessage(data.from, data.message, "other");
+        } else {
+          alert(`Nouveau message de ${data.from}: ${data.message}`);
+        }
+      }
+    };
 
-function selectFriend(f){
-  currentFriend = f;
-  renderFriends();
-  renderMessages();
-}
+    function openConversation(friend) {
+      currentFriend = friend;
+      const msgBox = document.getElementById("messages");
+      msgBox.innerHTML = `<h4>Conversation avec ${friend}</h4>`;
+    }
 
-function renderMessages(){
-  messagesDiv.innerHTML='';
-  if(!currentFriend) return;
-  const msgs = chatHistory[currentFriend] || [];
-  msgs.forEach(m=>{
-    const div = document.createElement('div');
-    div.className='message '+(m.from===myCode?'sent':'received');
-    div.textContent = m.message;
-    messagesDiv.appendChild(div);
-  });
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
+    function addMessage(from, text, cssClass) {
+      const msgBox = document.getElementById("messages");
+      const div = document.createElement("div");
+      div.className = "msg " + cssClass;
+      div.textContent = `${from}: ${text}`;
+      msgBox.appendChild(div);
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }
 
-// ------------------ SEND MESSAGE ------------------
-sendBtn.onclick = () => {
-  if(!currentFriend) return alert('Sélectionne un ami');
-  const text = messageInput.value.trim();
-  if(!text) return;
-  // send via WS
-  wsSend({ cmd:'message', target:currentFriend, message:text });
-  // add locally
-  if(!chatHistory[currentFriend]) chatHistory[currentFriend]=[];
-  chatHistory[currentFriend].push({from:myCode,message:text});
-  renderMessages();
-  messageInput.value='';
-};
-
-// ------------------ WS ------------------
-ws.onopen = ()=>{
-  if(myCode) wsSend({ cmd:'register', code: myCode });
-};
-
-ws.onmessage = (ev)=>{
-  let msg;
-  try{ msg=JSON.parse(ev.data); }catch(e){ return; }
-
-  switch(msg.type){
-    case 'registered':
-      myCode = msg.code;
-      localStorage.setItem('myCode', myCode);
-      break;
-
-    case 'friend-request':
-      showNotification(`Nouvelle demande d'ami de <strong>${msg.from}</strong>`);
-      break;
-
-    case 'friend-accepted':
-      friends.add(msg.from);
-      renderFriends();
-      showNotification(`<strong>${msg.from}</strong> est maintenant ton ami !`);
-      break;
-
-    case 'message':
-      if(!chatHistory[msg.from]) chatHistory[msg.from]=[];
-      chatHistory[msg.from].push({from:msg.from,message:msg.message});
-      showNotification(`Nouveau message de <strong>${msg.from}</strong>`);
-      // si la conversation est ouverte, rerender
-      if(currentFriend===msg.from) renderMessages();
-      break;
-  }
-};
-
-// ------------------ Back to App ------------------
-document.getElementById('backToApp').onclick=()=>{ window.location.href='index.html'; };
-
-// ------------------ Demo friends ------------------
-// récupère amis depuis le serveur ou localStorage si tu veux
-// pour l'instant on simule
-friends = new Set(JSON.parse(localStorage.getItem('friends')||'[]'));
-renderFriends();
-</script>
+    function sendMessage() {
+      const input = document.getElementById("msgInput");
+      const text = input.value.trim();
+      if (!text || !currentFriend) return;
+      ws.send(JSON.stringify({ cmd: "message", target: currentFriend, message: text }));
+      addMessage("Moi", text, "me");
+      input.value = "";
+    }
+  </script>
 </body>
 </html>
