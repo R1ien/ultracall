@@ -121,7 +121,7 @@ function initWebSocket() {
 // ---------------- FRIENDS ----------------
 function renderFriends(list) {
   const friendsDiv = document.getElementById('friendsList');
-  if (!list) list = JSON.parse(localStorage.getItem(friendsListKey) || '[]');
+  if (!list) list = friendsArray; // récupéré depuis localStorage
   friendsDiv.innerHTML = '';
   if (list.length === 0) friendsDiv.innerHTML = '<div class="small">Aucun ami</div>';
   list.forEach(f => {
@@ -132,6 +132,7 @@ function renderFriends(list) {
     friendsDiv.appendChild(div);
   });
 }
+
 
 // ---------------- CHAT ----------------
 function openChat(friend) {
