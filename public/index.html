@@ -79,9 +79,16 @@ input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid rgb
 <div id="loader"><i class="fa fa-spinner"></i> Chargement...</div>
 
 <header style="display:none">
-  <div class="logo"><div class="badge"><i class="fa fa-phone"></i></div>Ultra Call</div>
+  <div class="logo">
+    <div class="badge" id="messagingBadge" style="position:relative;cursor:pointer">
+      <i class="fa fa-envelope"></i>
+      <span id="friendReqCount" style="position:absolute;top:-8px;right:-8px;background:#ff5b5b;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;display:none">0</span>
+    </div>
+    Ultra Call
+  </div>
   <div class="nav"><span class="active">Appels</span><span class="coming">Messages (Coming Soon)</span></div>
 </header>
+
 
 <main class="container" style="display:none">
   <section class="col card">
@@ -527,6 +534,64 @@ function initApp() {
   document.querySelector('header').style.display='flex';
   document.querySelector('main').style.display='flex';
 }
+  /* ========= Friend Requests / Messaging Badge ========= */
+let pendingFriendRequests = JSON.parse(localStorage.getItem('pendingFriendRequests')||'[]');
+const badgeEl = document.getElementById('friendReqCount');
+const badgeWrapper = document.getElementById('messagingBadge');
+
+function updateBadge() {
+  if(pendingFriendRequests.length>0){
+    badgeEl.style.display='flex';
+    badgeEl.textContent = pendingFriendRequests.length;
+  }else{
+    badgeEl.style.display='none';
+  }
+}
+
+function renderFriendRequests() {
+  if(pendingFriendRequests.length===0){ showNotification('Aucune demande d\'ami en attente',3000); return; }
+  let html = '';
+  pendingFriendRequests.forEach(code=>{
+    html+=`<div style="margin-bottom:8px"><strong>${code}</strong> 
+      <button class="btn" onclick="acceptFR('${code}')">Accepter</button>
+      <button class="btn ghost" onclick="rejectFR('${code}')">Refuser</button>
+    </div>`;
+  });
+  showNotification(html,0);
+}
+
+function acceptFR(code){
+  wsSend({cmd:'friend-accept', target:code});
+  addFriend(code);
+  pendingFriendRequests = pendingFriendRequests.filter(c=>c!==code);
+  localStorage.setItem('pendingFriendRequests', JSON.stringify(pendingFriendRequests));
+  updateBadge();
+}
+
+function rejectFR(code){
+  wsSend({cmd:'friend-reject', target:code});
+  pendingFriendRequests = pendingFriendRequests.filter(c=>c!==code);
+  localStorage.setItem('pendingFriendRequests', JSON.stringify(pendingFriendRequests));
+  updateBadge();
+}
+
+badgeWrapper.addEventListener('click', renderFriendRequests);
+
+ws.addEventListener('message', async (ev)=>{
+  let msg;
+  try{ msg=JSON.parse(ev.data);}catch(e){return;}
+  if(msg.type==='friend-request'){
+    if(!pendingFriendRequests.includes(msg.from)) pendingFriendRequests.push(msg.from);
+    localStorage.setItem('pendingFriendRequests', JSON.stringify(pendingFriendRequests));
+    updateBadge();
+    // tu peux garder la notif classique si tu veux
+    showNotification(`<strong>${msg.from}</strong> t'envoie une demande d'ami`,3000);
+  }
+});
+
+// au chargement
+updateBadge();
+
 
 // petit délai pour voir loader
 window.addEventListener('load', ()=>{ setTimeout(initApp, 500); });
@@ -534,3 +599,4 @@ window.addEventListener('load', ()=>{ setTimeout(initApp, 500); });
 
 </body>
 </html>
+
